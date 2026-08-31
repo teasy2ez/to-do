@@ -5,26 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  
   <style>
     body {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       background-color: #000;
       color: #10b981;
     }
-    .drag-over {
-      border-color: #34d399 !important;
-      background-color: #064e3b22 !important;
-    }
   </style>
 </head>
 <body class="min-h-screen p-6 antialiased selection:bg-emerald-950 selection:text-emerald-300">
   <div class="max-w-xl mx-auto py-12">
-    <!-- Header -->
-    <header class="mb-8 border-b border-emerald-900/60 pb-4">
+    <header class="mb-8 border-b border-emerald-900/60 pb-4 flex justify-between items-center">
       <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
+      <span id="sync-status" class="text-[10px] text-emerald-700">connecting firebase...</span>
     </header>
 
-    <!-- Input Area -->
     <div class="mb-8 space-y-2">
       <div class="flex gap-4 text-xs mb-2">
         <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
@@ -42,13 +41,11 @@
       </div>
     </div>
 
-    <!-- Section: Now -->
     <section class="mb-8">
       <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
       <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
     </section>
 
-    <!-- Section: Later -->
     <section>
       <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
         <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
@@ -57,27 +54,51 @@
       <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
     </section>
 
-    <!-- Footer -->
     <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
-      <span>status: active</span>
+      <span>status: firebase active</span>
       <span id="pending-count">0 pending tasks</span>
     </footer>
   </div>
 
   <script>
+    // --- PASTE YOUR FIREBASE CONFIG HERE ---
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    // ----------------------------------------
+
+    // Initialize Firebase & Firestore
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     let targetList = 'now';
     let laterMinimized = false;
     let draggedId = null;
+    let todos = [];
 
-    let todos = JSON.parse(localStorage.getItem('terminal_todos')) || [
-      { id: '1', text: 'build terminal frontend interface', completed: false, list: 'now' },
-      { id: '2', text: 'drag and drop tasks to reorder', completed: false, list: 'now' },
-      { id: '3', text: 'archive old projects', completed: false, list: 'later' }
-    ];
+    // Real-time listener: updates automatically across all open browser instances/devices
+    function initRealtimeSync() {
+      db.collection("tasks").orderBy("createdAt", "asc")
+        .onSnapshot((snapshot) => {
+          todos = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          updateSyncStatus('synced');
+          render();
+        }, (error) => {
+          console.error("Firestore error:", error);
+          updateSyncStatus('sync error');
+        });
+    }
 
-    function save() {
-      localStorage.setItem('terminal_todos', JSON.stringify(todos));
-      render();
+    function updateSyncStatus(msg) {
+      document.getElementById('sync-status').innerText = msg;
     }
 
     function setTarget(list) {
@@ -87,30 +108,50 @@
       document.getElementById('btn-later').className = list === 'later' ? 'text-emerald-400 font-bold underline' : 'text-emerald-700 hover:text-emerald-300';
     }
 
-    function addTask() {
+    async function addTask() {
       const input = document.getElementById('task-input');
       const val = input.value.trim().toLowerCase();
       if (!val) return;
 
-      todos.push({
-        id: Date.now().toString(),
+      const taskId = Date.now().toString();
+      const newTask = {
         text: val,
         completed: false,
-        list: targetList
-      });
+        list: targetList,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
 
       input.value = '';
-      save();
+      updateSyncStatus('saving...');
+      
+      try {
+        await db.collection("tasks").doc(taskId).set(newTask);
+      } catch (err) {
+        console.error("Error adding task:", err);
+      }
     }
 
-    function toggleTask(id) {
-      todos = todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-      save();
+    async function toggleTask(id) {
+      const task = todos.find(t => t.id === id);
+      if (!task) return;
+
+      updateSyncStatus('updating...');
+      try {
+        await db.collection("tasks").doc(id).update({
+          completed: !task.completed
+        });
+      } catch (err) {
+        console.error("Error toggling task:", err);
+      }
     }
 
-    function deleteTask(id) {
-      todos = todos.filter(t => t.id !== id);
-      save();
+    async function deleteTask(id) {
+      updateSyncStatus('deleting...');
+      try {
+        await db.collection("tasks").doc(id).delete();
+      } catch (err) {
+        console.error("Error deleting task:", err);
+      }
     }
 
     function toggleLater() {
@@ -129,22 +170,24 @@
       e.preventDefault();
     }
 
-    function handleDrop(e, targetSection) {
+    async function handleDrop(e, targetSection) {
       e.preventDefault();
       if (!draggedId) return;
 
-      const draggedIndex = todos.findIndex(t => t.id === draggedId);
-      if (draggedIndex === -1) return;
+      const task = todos.find(t => t.id === draggedId);
+      if (!task || task.list === targetSection) return;
 
-      // Update list assignment
-      todos[draggedIndex].list = targetSection;
-
-      // Move element to end of target section order
-      const item = todos.splice(draggedIndex, 1)[0];
-      todos.push(item);
-
+      updateSyncStatus('updating...');
+      const idToUpdate = draggedId;
       draggedId = null;
-      save();
+
+      try {
+        await db.collection("tasks").doc(idToUpdate).update({
+          list: targetSection
+        });
+      } catch (err) {
+        console.error("Error moving task:", err);
+      }
     }
 
     function render() {
@@ -199,7 +242,8 @@
       return div;
     }
 
-    render();
+    // Start real-time listener
+    initRealtimeSync();
   </script>
 </body>
 </html>

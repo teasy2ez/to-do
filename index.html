@@ -23,7 +23,7 @@
     <!-- Header -->
     <header class="mb-8 border-b border-emerald-900/60 pb-4 flex justify-between items-center">
       <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
-      <span id="sync-status" class="text-[10px] text-emerald-700">connecting firebase...</span>
+      <span id="sync-status" class="text-[10px] text-emerald-700">starting...</span>
     </header>
 
     <!-- Input Area -->
@@ -70,13 +70,12 @@
 
     <!-- Footer -->
     <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
-      <span>status: firebase active</span>
+      <span id="storage-mode">status: offline storage</span>
       <span id="pending-count">0 pending tasks</span>
     </footer>
   </div>
 
   <script>
-    // --- PASTE YOUR FIREBASE CONFIG HERE ---
     const firebaseConfig = {
       apiKey: "AIzaSyAAN10JXtcd4-ikgXCZxABGPYBRfDH5C5g",
       authDomain: "to-do-t.firebaseapp.com",
@@ -84,22 +83,45 @@
       storageBucket: "to-do-t.firebasestorage.app",
       messagingSenderId: "862859632310",
       appId: "1:862859632310:web:6ad0e655b25878b3025017"
-};
-    // ----------------------------------------
+    };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    let db = null;
+    let isFirebaseReady = false;
+
+    // Check if configuration has been replaced from placeholder
+    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        isFirebaseReady = true;
+      } catch (err) {
+        console.warn("Firebase initialization failed, using local storage:", err);
+      }
+    }
 
     let targetList = 'now';
     let laterMinimized = false;
     let completedMinimized = false;
     let draggedId = null;
-    let todos = [];
 
-    // Helper function to format dates as YYYY/MM/DD - HH:MM
-    function formatDate(dateObj) {
-      if (!dateObj) return '';
-      const date = dateObj.toDate ? dateObj.toDate() : new Date(dateObj);
+    // Load initial tasks from local storage immediately so UI never flashes blank
+    let todos = JSON.parse(localStorage.getItem('terminal_todos_v2')) || [];
+
+    function saveLocal() {
+      localStorage.setItem('terminal_todos_v2', JSON.stringify(todos));
+      render();
+    }
+
+    function formatDate(val) {
+      if (!val) return '';
+      let date;
+      if (val.toDate) {
+        date = val.toDate(); // Firebase Timestamp
+      } else {
+        date = new Date(val); // ISO String or ms
+      }
+      if (isNaN(date.getTime())) return '';
+
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -108,19 +130,39 @@
       return `${year}/${month}/${day} - ${hours}:${minutes}`;
     }
 
-    function initRealtimeSync() {
-      db.collection("tasks").orderBy("createdAt", "asc")
-        .onSnapshot((snapshot) => {
-          todos = snapshot.docs.map(doc => ({
+    function initSync() {
+      if (!isFirebaseReady) {
+        updateSyncStatus('local mode');
+        document.getElementById('storage-mode').innerText = 'status: local storage';
+        render();
+        return;
+      }
+
+      document.getElementById('storage-mode').innerText = 'status: firebase cloud';
+      updateSyncStatus('connecting...');
+
+      // Listen without orderBy to avoid unindexed query silent drops
+      db.collection("tasks").onSnapshot((snapshot) => {
+        todos = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
             id: doc.id,
-            ...doc.data()
-          }));
-          updateSyncStatus('synced');
-          render();
-        }, (error) => {
-          console.error("Firestore error:", error);
-          updateSyncStatus('sync error');
+            ...data,
+            // Normalize timestamps to ISO strings for uniform handling
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate().toISOString() : data.completedAt
+          };
         });
+
+        // Sort locally by creation date
+        todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+        saveLocal();
+        updateSyncStatus('synced');
+      }, (error) => {
+        console.error("Firestore sync error:", error);
+        updateSyncStatus('sync error (using local)');
+      });
     }
 
     function updateSyncStatus(msg) {
@@ -139,23 +181,37 @@
       const val = input.value.trim().toLowerCase();
       if (!val) return;
 
+      const nowIso = new Date().toISOString();
       const taskId = Date.now().toString();
+
       const newTask = {
+        id: taskId,
         text: val,
         completed: false,
         list: targetList,
         previousList: targetList,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdAt: nowIso,
         completedAt: null
       };
 
       input.value = '';
-      updateSyncStatus('saving...');
-      
-      try {
-        await db.collection("tasks").doc(taskId).set(newTask);
-      } catch (err) {
-        console.error("Error adding task:", err);
+
+      // Instant local update
+      todos.push(newTask);
+      saveLocal();
+
+      if (isFirebaseReady) {
+        updateSyncStatus('saving...');
+        try {
+          await db.collection("tasks").doc(taskId).set({
+            ...newTask,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          updateSyncStatus('synced');
+        } catch (err) {
+          console.error("Firebase write failed:", err);
+          updateSyncStatus('saved locally');
+        }
       }
     }
 
@@ -164,33 +220,47 @@
       if (!task) return;
 
       const isCompleting = !task.completed;
-      updateSyncStatus('updating...');
+      const nowIso = new Date().toISOString();
 
-      const updateData = {
-        completed: isCompleting,
-        completedAt: isCompleting ? firebase.firestore.FieldValue.serverTimestamp() : null
-      };
+      task.completed = isCompleting;
+      task.completedAt = isCompleting ? nowIso : null;
 
-      // Store previous list when completing, restore list when unchecking
       if (isCompleting) {
-        updateData.previousList = task.list;
+        task.previousList = task.list;
       } else if (task.previousList) {
-        updateData.list = task.previousList;
+        task.list = task.previousList;
       }
 
-      try {
-        await db.collection("tasks").doc(id).update(updateData);
-      } catch (err) {
-        console.error("Error toggling task:", err);
+      saveLocal();
+
+      if (isFirebaseReady) {
+        updateSyncStatus('updating...');
+        try {
+          await db.collection("tasks").doc(id).update({
+            completed: task.completed,
+            completedAt: isCompleting ? firebase.firestore.FieldValue.serverTimestamp() : null,
+            list: task.list,
+            previousList: task.previousList || 'now'
+          });
+          updateSyncStatus('synced');
+        } catch (err) {
+          console.error("Firebase update failed:", err);
+        }
       }
     }
 
     async function deleteTask(id) {
-      updateSyncStatus('deleting...');
-      try {
-        await db.collection("tasks").doc(id).delete();
-      } catch (err) {
-        console.error("Error deleting task:", err);
+      todos = todos.filter(t => t.id !== id);
+      saveLocal();
+
+      if (isFirebaseReady) {
+        updateSyncStatus('deleting...');
+        try {
+          await db.collection("tasks").doc(id).delete();
+          updateSyncStatus('synced');
+        } catch (err) {
+          console.error("Firebase delete failed:", err);
+        }
       }
     }
 
@@ -223,17 +293,24 @@
       const task = todos.find(t => t.id === draggedId);
       if (!task || task.completed || task.list === targetSection) return;
 
-      updateSyncStatus('updating...');
+      task.list = targetSection;
+      task.previousList = targetSection;
       const idToUpdate = draggedId;
       draggedId = null;
 
-      try {
-        await db.collection("tasks").doc(idToUpdate).update({
-          list: targetSection,
-          previousList: targetSection
-        });
-      } catch (err) {
-        console.error("Error moving task:", err);
+      saveLocal();
+
+      if (isFirebaseReady) {
+        updateSyncStatus('updating...');
+        try {
+          await db.collection("tasks").doc(idToUpdate).update({
+            list: targetSection,
+            previousList: targetSection
+          });
+          updateSyncStatus('synced');
+        } catch (err) {
+          console.error("Firebase move failed:", err);
+        }
       }
     }
 
@@ -282,7 +359,6 @@
     function createTaskElement(todo) {
       const div = document.createElement('div');
       
-      // Only allow drag if task is active
       if (!todo.completed) {
         div.draggable = true;
         div.ondragstart = (e) => handleDragStart(e, todo.id);
@@ -311,7 +387,6 @@
           </button>
         </div>
         
-        <!-- Timestamps -->
         <div class="mt-1 pl-7 flex gap-4 text-[9px] text-emerald-900 select-none">
           ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
           ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
@@ -321,7 +396,9 @@
       return div;
     }
 
-    initRealtimeSync();
+    // Initialize rendering and syncing immediately
+    render();
+    initSync();
   </script>
 </body>
 </html>

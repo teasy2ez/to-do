@@ -6,6 +6,7 @@
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
   
+  <!-- Firebase Compatibility SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
@@ -19,11 +20,13 @@
 </head>
 <body class="min-h-screen p-6 antialiased selection:bg-emerald-950 selection:text-emerald-300">
   <div class="max-w-xl mx-auto py-12">
+    <!-- Header -->
     <header class="mb-8 border-b border-emerald-900/60 pb-4 flex justify-between items-center">
       <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
       <span id="sync-status" class="text-[10px] text-emerald-700">connecting firebase...</span>
     </header>
 
+    <!-- Input Area -->
     <div class="mb-8 space-y-2">
       <div class="flex gap-4 text-xs mb-2">
         <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
@@ -41,12 +44,14 @@
       </div>
     </div>
 
+    <!-- Section: Now -->
     <section class="mb-8">
       <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
       <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
     </section>
 
-    <section>
+    <!-- Section: Later -->
+    <section class="mb-8">
       <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
         <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
         <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-700 hover:text-emerald-400">[-] minimize</button>
@@ -54,6 +59,16 @@
       <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
     </section>
 
+    <!-- Section: Completed -->
+    <section>
+      <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
+        <h2 class="text-xs text-emerald-800 uppercase tracking-wider">// completed</h2>
+        <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-800 hover:text-emerald-600">[-] minimize</button>
+      </div>
+      <div id="list-completed" class="space-y-1.5 min-h-[40px]"></div>
+    </section>
+
+    <!-- Footer -->
     <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
       <span>status: firebase active</span>
       <span id="pending-count">0 pending tasks</span>
@@ -63,25 +78,36 @@
   <script>
     // --- PASTE YOUR FIREBASE CONFIG HERE ---
     const firebaseConfig = {
-      apiKey: "AIzaSyAAN10JXtcd4-ikgXCZxABGPYBRfDH5C5g",
-      authDomain: "to-do-t.firebaseapp.com",
-      projectId: "to-do-t",
-      storageBucket: "to-do-t.firebasestorage.app",
-      messagingSenderId: "862859632310",
-      appId: "1:862859632310:web:6ad0e655b25878b3025017"
-};
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
     // ----------------------------------------
 
-    // Initialize Firebase & Firestore
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
     let targetList = 'now';
     let laterMinimized = false;
+    let completedMinimized = false;
     let draggedId = null;
     let todos = [];
 
-    // Real-time listener: updates automatically across all open browser instances/devices
+    // Helper function to format dates as YYYY/MM/DD - HH:MM
+    function formatDate(dateObj) {
+      if (!dateObj) return '';
+      const date = dateObj.toDate ? dateObj.toDate() : new Date(dateObj);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}/${month}/${day} - ${hours}:${minutes}`;
+    }
+
     function initRealtimeSync() {
       db.collection("tasks").orderBy("createdAt", "asc")
         .onSnapshot((snapshot) => {
@@ -118,7 +144,9 @@
         text: val,
         completed: false,
         list: targetList,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        previousList: targetList,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        completedAt: null
       };
 
       input.value = '';
@@ -135,11 +163,23 @@
       const task = todos.find(t => t.id === id);
       if (!task) return;
 
+      const isCompleting = !task.completed;
       updateSyncStatus('updating...');
+
+      const updateData = {
+        completed: isCompleting,
+        completedAt: isCompleting ? firebase.firestore.FieldValue.serverTimestamp() : null
+      };
+
+      // Store previous list when completing, restore list when unchecking
+      if (isCompleting) {
+        updateData.previousList = task.list;
+      } else if (task.previousList) {
+        updateData.list = task.previousList;
+      }
+
       try {
-        await db.collection("tasks").doc(id).update({
-          completed: !task.completed
-        });
+        await db.collection("tasks").doc(id).update(updateData);
       } catch (err) {
         console.error("Error toggling task:", err);
       }
@@ -160,6 +200,12 @@
       render();
     }
 
+    function toggleCompleted() {
+      completedMinimized = !completedMinimized;
+      document.getElementById('btn-toggle-completed').innerText = completedMinimized ? '[+] expand' : '[-] minimize';
+      render();
+    }
+
     // Drag and Drop
     function handleDragStart(e, id) {
       draggedId = id;
@@ -175,7 +221,7 @@
       if (!draggedId) return;
 
       const task = todos.find(t => t.id === draggedId);
-      if (!task || task.list === targetSection) return;
+      if (!task || task.completed || task.list === targetSection) return;
 
       updateSyncStatus('updating...');
       const idToUpdate = draggedId;
@@ -183,7 +229,8 @@
 
       try {
         await db.collection("tasks").doc(idToUpdate).update({
-          list: targetSection
+          list: targetSection,
+          previousList: targetSection
         });
       } catch (err) {
         console.error("Error moving task:", err);
@@ -193,19 +240,25 @@
     function render() {
       const nowContainer = document.getElementById('list-now');
       const laterContainer = document.getElementById('list-later');
+      const completedContainer = document.getElementById('list-completed');
 
       nowContainer.innerHTML = '';
       laterContainer.innerHTML = '';
+      completedContainer.innerHTML = '';
 
-      const nowItems = todos.filter(t => t.list === 'now');
-      const laterItems = todos.filter(t => t.list === 'later');
+      const activeTodos = todos.filter(t => !t.completed);
+      const nowItems = activeTodos.filter(t => t.list === 'now');
+      const laterItems = activeTodos.filter(t => t.list === 'later');
+      const completedItems = todos.filter(t => t.completed);
 
+      // Render Now
       if (nowItems.length === 0) {
         nowContainer.innerHTML = '<p class="text-xs text-emerald-900 italic py-1">> empty</p>';
       } else {
         nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
       }
 
+      // Render Later
       if (laterMinimized) {
         laterContainer.innerHTML = '';
       } else if (laterItems.length === 0) {
@@ -214,35 +267,60 @@
         laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
       }
 
-      const pending = todos.filter(t => !t.completed).length;
-      document.getElementById('pending-count').innerText = `${pending} pending tasks`;
+      // Render Completed
+      if (completedMinimized) {
+        completedContainer.innerHTML = '';
+      } else if (completedItems.length === 0) {
+        completedContainer.innerHTML = '<p class="text-xs text-emerald-900 italic py-1">> empty</p>';
+      } else {
+        completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
+      }
+
+      document.getElementById('pending-count').innerText = `${activeTodos.length} pending tasks`;
     }
 
     function createTaskElement(todo) {
       const div = document.createElement('div');
-      div.draggable = true;
-      div.ondragstart = (e) => handleDragStart(e, todo.id);
-      div.className = `group flex items-center justify-between p-2 rounded border border-emerald-900/60 bg-black hover:border-emerald-500/50 cursor-grab active:cursor-grabbing transition-colors ${todo.completed ? 'opacity-40' : ''}`;
+      
+      // Only allow drag if task is active
+      if (!todo.completed) {
+        div.draggable = true;
+        div.ondragstart = (e) => handleDragStart(e, todo.id);
+      }
+
+      div.className = `group flex flex-col p-2 rounded border border-emerald-900/60 bg-black hover:border-emerald-500/50 transition-colors ${
+        todo.completed ? 'opacity-40 border-emerald-950' : 'cursor-grab active:cursor-grabbing'
+      }`;
+
+      const createdStr = formatDate(todo.createdAt);
+      const completedStr = formatDate(todo.completedAt);
 
       div.innerHTML = `
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="text-emerald-800 select-none text-xs">⋮⋮</span>
-          <button onclick="toggleTask('${todo.id}')" class="text-xs hover:text-emerald-300">
-            ${todo.completed ? '[x]' : '[ ]'}
+        <div class="flex items-center justify-between min-w-0">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-emerald-900 select-none text-xs">${todo.completed ? '•' : '⋮⋮'}</span>
+            <button onclick="toggleTask('${todo.id}')" class="text-xs hover:text-emerald-300">
+              ${todo.completed ? '[x]' : '[ ]'}
+            </button>
+            <span class="text-xs ${todo.completed ? 'line-through text-emerald-700' : 'text-emerald-400'}">
+              ${todo.text}
+            </span>
+          </div>
+          <button onclick="deleteTask('${todo.id}')" class="text-emerald-800 hover:text-emerald-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity px-1">
+            [del]
           </button>
-          <span class="text-xs ${todo.completed ? 'line-through text-emerald-700' : 'text-emerald-400'}">
-            ${todo.text}
-          </span>
         </div>
-        <button onclick="deleteTask('${todo.id}')" class="text-emerald-800 hover:text-emerald-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity px-1">
-          [del]
-        </button>
+        
+        <!-- Timestamps -->
+        <div class="mt-1 pl-7 flex gap-4 text-[9px] text-emerald-900 select-none">
+          ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
+          ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
+        </div>
       `;
 
       return div;
     }
 
-    // Start real-time listener
     initRealtimeSync();
   </script>
 </body>

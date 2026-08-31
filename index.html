@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>terminal to-do</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background-color: #000;
+      color: #10b981;
+    }
+    .drag-over {
+      border-color: #34d399 !important;
+      background-color: #064e3b22 !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6 antialiased selection:bg-emerald-950 selection:text-emerald-300">
+  <div class="max-w-xl mx-auto py-12">
+    <!-- Header -->
+    <header class="mb-8 border-b border-emerald-900/60 pb-4">
+      <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
+    </header>
+
+    <!-- Input Area -->
+    <div class="mb-8 space-y-2">
+      <div class="flex gap-4 text-xs mb-2">
+        <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
+        <button id="btn-later" onclick="setTarget('later')" class="text-emerald-700 hover:text-emerald-300">+ add to later</button>
+      </div>
+      <div class="flex items-center gap-2 bg-black border border-emerald-900 rounded px-3 py-2 focus-within:border-emerald-500">
+        <span class="text-xs text-emerald-600">></span>
+        <input
+          id="task-input"
+          type="text"
+          placeholder="add task to now..."
+          class="w-full bg-transparent text-xs text-emerald-400 placeholder-emerald-800 focus:outline-none"
+          onkeydown="if(event.key === 'Enter') addTask()"
+        />
+      </div>
+    </div>
+
+    <!-- Section: Now -->
+    <section class="mb-8">
+      <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
+      <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
+    </section>
+
+    <!-- Section: Later -->
+    <section>
+      <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
+        <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
+        <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-700 hover:text-emerald-400">[-] minimize</button>
+      </div>
+      <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
+      <span>status: active</span>
+      <span id="pending-count">0 pending tasks</span>
+    </footer>
+  </div>
+
+  <script>
+    let targetList = 'now';
+    let laterMinimized = false;
+    let draggedId = null;
+
+    let todos = JSON.parse(localStorage.getItem('terminal_todos')) || [
+      { id: '1', text: 'build terminal frontend interface', completed: false, list: 'now' },
+      { id: '2', text: 'drag and drop tasks to reorder', completed: false, list: 'now' },
+      { id: '3', text: 'archive old projects', completed: false, list: 'later' }
+    ];
+
+    function save() {
+      localStorage.setItem('terminal_todos', JSON.stringify(todos));
+      render();
+    }
+
+    function setTarget(list) {
+      targetList = list;
+      document.getElementById('task-input').placeholder = `add task to ${list}...`;
+      document.getElementById('btn-now').className = list === 'now' ? 'text-emerald-400 font-bold underline' : 'text-emerald-700 hover:text-emerald-300';
+      document.getElementById('btn-later').className = list === 'later' ? 'text-emerald-400 font-bold underline' : 'text-emerald-700 hover:text-emerald-300';
+    }
+
+    function addTask() {
+      const input = document.getElementById('task-input');
+      const val = input.value.trim().toLowerCase();
+      if (!val) return;
+
+      todos.push({
+        id: Date.now().toString(),
+        text: val,
+        completed: false,
+        list: targetList
+      });
+
+      input.value = '';
+      save();
+    }
+
+    function toggleTask(id) {
+      todos = todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+      save();
+    }
+
+    function deleteTask(id) {
+      todos = todos.filter(t => t.id !== id);
+      save();
+    }
+
+    function toggleLater() {
+      laterMinimized = !laterMinimized;
+      document.getElementById('btn-toggle-later').innerText = laterMinimized ? '[+] expand' : '[-] minimize';
+      render();
+    }
+
+    // Drag and Drop
+    function handleDragStart(e, id) {
+      draggedId = id;
+      e.dataTransfer.setData('text/plain', id);
+    }
+
+    function allowDrop(e) {
+      e.preventDefault();
+    }
+
+    function handleDrop(e, targetSection) {
+      e.preventDefault();
+      if (!draggedId) return;
+
+      const draggedIndex = todos.findIndex(t => t.id === draggedId);
+      if (draggedIndex === -1) return;
+
+      // Update list assignment
+      todos[draggedIndex].list = targetSection;
+
+      // Move element to end of target section order
+      const item = todos.splice(draggedIndex, 1)[0];
+      todos.push(item);
+
+      draggedId = null;
+      save();
+    }
+
+    function render() {
+      const nowContainer = document.getElementById('list-now');
+      const laterContainer = document.getElementById('list-later');
+
+      nowContainer.innerHTML = '';
+      laterContainer.innerHTML = '';
+
+      const nowItems = todos.filter(t => t.list === 'now');
+      const laterItems = todos.filter(t => t.list === 'later');
+
+      if (nowItems.length === 0) {
+        nowContainer.innerHTML = '<p class="text-xs text-emerald-900 italic py-1">> empty</p>';
+      } else {
+        nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
+      }
+
+      if (laterMinimized) {
+        laterContainer.innerHTML = '';
+      } else if (laterItems.length === 0) {
+        laterContainer.innerHTML = '<p class="text-xs text-emerald-900 italic py-1">> empty</p>';
+      } else {
+        laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
+      }
+
+      const pending = todos.filter(t => !t.completed).length;
+      document.getElementById('pending-count').innerText = `${pending} pending tasks`;
+    }
+
+    function createTaskElement(todo) {
+      const div = document.createElement('div');
+      div.draggable = true;
+      div.ondragstart = (e) => handleDragStart(e, todo.id);
+      div.className = `group flex items-center justify-between p-2 rounded border border-emerald-900/60 bg-black hover:border-emerald-500/50 cursor-grab active:cursor-grabbing transition-colors ${todo.completed ? 'opacity-40' : ''}`;
+
+      div.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-emerald-800 select-none text-xs">⋮⋮</span>
+          <button onclick="toggleTask('${todo.id}')" class="text-xs hover:text-emerald-300">
+            ${todo.completed ? '[x]' : '[ ]'}
+          </button>
+          <span class="text-xs ${todo.completed ? 'line-through text-emerald-700' : 'text-emerald-400'}">
+            ${todo.text}
+          </span>
+        </div>
+        <button onclick="deleteTask('${todo.id}')" class="text-emerald-800 hover:text-emerald-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity px-1">
+          [del]
+        </button>
+      `;
+
+      return div;
+    }
+
+    render();
+  </script>
+</body>
+</html>

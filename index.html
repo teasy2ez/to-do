@@ -5,11 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#010409" />
   
-  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -47,12 +43,10 @@
   </style>
 </head>
 <body class="min-h-screen p-6 antialiased selection:bg-emerald-800 selection:text-emerald-100 relative">
-  <!-- Scanline Layer -->
   <div class="fixed inset-0 crt-overlay z-50 pointer-events-none"></div>
 
   <div class="max-w-2xl mx-auto py-10 relative z-10">
     
-    <!-- Auth Screen -->
     <div id="auth-screen" class="space-y-8">
       <header class="border-b-2 border-emerald-600 pb-5">
         <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> terminal_auth.exe</h1>
@@ -77,25 +71,20 @@
       </div>
     </div>
 
-    <!-- App Screen (Hidden until logged in) -->
     <div id="app-screen" class="hidden space-y-8">
-      <!-- Header -->
       <header class="border-b-2 border-emerald-600 pb-5 flex justify-between items-center">
         <div>
           <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> task_manager.exe</h1>
           <span id="user-display" class="text-sm text-emerald-300/90 font-medium">user: --</span>
-          <button onclick="copyShareLink()" class="text-sm text-emerald-300 hover:text-emerald-100 font-bold glow-text">
-  [share list]
-</button>
         </div>
         <div class="flex items-center gap-5">
           <span id="sync-status" class="text-sm text-emerald-300 font-bold glow-text">synced</span>
-          <button onclick="logout()" class="text-base text-emerald-300 hover:text-emerald-100 font-bold">[logout]</button>
+          <button id="btn-share" onclick="copyShareLink()" class="text-base text-emerald-300 hover:text-emerald-100 font-bold glow-text">[share list]</button>
+          <button id="btn-logout" onclick="logout()" class="text-base text-emerald-300 hover:text-emerald-100 font-bold">[logout]</button>
         </div>
       </header>
 
-      <!-- Input Area -->
-      <div class="space-y-3">
+      <div id="input-container" class="space-y-3">
         <div class="flex gap-6 text-base mb-2">
           <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
           <button id="btn-later" onclick="setTarget('later')" class="text-emerald-400 hover:text-emerald-100 font-semibold">+ add to later</button>
@@ -112,13 +101,11 @@
         </div>
       </div>
 
-      <!-- Section: Now -->
       <section>
         <h2 class="text-base text-emerald-300 font-bold tracking-wider mb-3 glow-text">// now</h2>
         <div id="list-now" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
       </section>
 
-      <!-- Section: Later -->
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
           <h2 class="text-base text-emerald-300 font-bold tracking-wider glow-text">// later</h2>
@@ -127,7 +114,6 @@
         <div id="list-later" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
       </section>
 
-      <!-- Section: Completed -->
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
           <h2 class="text-base text-emerald-400 font-bold tracking-wider">// completed</h2>
@@ -136,9 +122,8 @@
         <div id="list-completed" class="space-y-2.5 min-h-[48px]"></div>
       </section>
 
-      <!-- Footer -->
       <footer class="mt-12 text-sm text-emerald-400/90 border-t-2 border-emerald-800/80 pt-5 flex justify-between font-medium">
-        <span>status: authenticated</span>
+        <span id="auth-status-display">status: authenticated</span>
         <span id="pending-count">0 pending tasks</span>
       </footer>
     </div>
@@ -167,24 +152,43 @@
     let draggedId = null;
     let todos = [];
 
+    function getSharedUserId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('share');
+    }
+
     auth.onAuthStateChanged((user) => {
-      if (user) {
-        currentUser = user;
+      currentUser = user;
+      const sharedUid = getSharedUserId();
+
+      if (sharedUid) {
+        // Shared Read-Only Mode (No login required)
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-screen').classList.remove('hidden');
+        document.getElementById('input-container').classList.add('hidden'); // Hide input controls
+        document.getElementById('btn-share').classList.add('hidden');
+        document.getElementById('btn-logout').classList.add('hidden');
+        document.getElementById('user-display').innerText = `mode: read-only viewer`;
+        document.getElementById('auth-status-display').innerText = `status: shared view`;
+        initSync();
+      } else if (user) {
+        // Logged-in Owner Mode
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app-screen').classList.remove('hidden');
+        document.getElementById('input-container').classList.remove('hidden');
+        document.getElementById('btn-share').classList.remove('hidden');
+        document.getElementById('btn-logout').classList.remove('hidden');
         document.getElementById('user-display').innerText = `user: ${user.email}`;
+        document.getElementById('auth-status-display').innerText = `status: authenticated`;
         initSync();
       } else {
-        currentUser = null;
+        // Logged-out Mode
         if (unsubscribeSync) unsubscribeSync();
         document.getElementById('app-screen').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
       }
     });
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('Service Worker Registered'));
-    }
+
     async function login() {
       const email = document.getElementById('auth-email').value;
       const pass = document.getElementById('auth-pass').value;
@@ -215,20 +219,22 @@
       auth.signOut();
     }
 
-    function getUserTasksRef() {
-      return db.collection('users').doc(currentUser.uid).collection('tasks');
+    function copyShareLink() {
+      if (!currentUser) return;
+      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${currentUser.uid}`;
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        alert('Share link copied to clipboard!\n\n' + shareUrl);
+      });
     }
 
     function initSync() {
       const sharedUid = getSharedUserId();
-      // If ?share= is in URL, fetch that user's list; otherwise fetch logged-in user's list
       const targetUid = sharedUid || (currentUser ? currentUser.uid : null);
 
       if (!targetUid) return;
 
-      updateSyncStatus(sharedUid ? 'viewing shared list' : 'connecting...');
+      updateSyncStatus(sharedUid ? 'loading shared tasks...' : 'connecting...');
 
-      // Unsubscribe from prior listener if active
       if (unsubscribeSync) unsubscribeSync();
 
       unsubscribeSync = db.collection('users').doc(targetUid).collection('tasks')
@@ -236,16 +242,16 @@
           todos = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
-      }));
+          }));
 
-      todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-      updateSyncStatus(sharedUid ? 'read-only' : 'synced');
-      render();
-    }, (error) => {
-      console.error(error);
-      updateSyncStatus('access denied or error');
-    });
-}
+          todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+          updateSyncStatus(sharedUid ? 'read-only mode' : 'synced');
+          render();
+        }, (error) => {
+          console.error(error);
+          updateSyncStatus('access error');
+        });
+    }
 
     function formatDate(val) {
       if (!val) return '';
@@ -265,6 +271,7 @@
     }
 
     function setTarget(list) {
+      if (getSharedUserId()) return;
       targetList = list;
       document.getElementById('task-input').placeholder = `add task to ${list}...`;
       document.getElementById('btn-now').className = list === 'now' ? 'text-emerald-200 font-bold underline glow-text' : 'text-emerald-400 hover:text-emerald-100 font-semibold';
@@ -272,6 +279,8 @@
     }
 
     async function addTask() {
+      if (getSharedUserId() || !currentUser) return; // Prevent adding in shared mode
+      
       const input = document.getElementById('task-input');
       const val = input.value.trim().toLowerCase();
       if (!val) return;
@@ -288,10 +297,12 @@
 
       input.value = '';
       updateSyncStatus('saving...');
-      await getUserTasksRef().doc(taskId).set(newTask);
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).set(newTask);
     }
 
     async function toggleTask(id) {
+      if (getSharedUserId() || !currentUser) return; // Prevent toggling in shared mode
+
       const task = todos.find(t => t.id === id);
       if (!task) return;
 
@@ -309,12 +320,14 @@
         updates.list = task.previousList;
       }
 
-      await getUserTasksRef().doc(id).update(updates);
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).update(updates);
     }
 
     async function deleteTask(id) {
+      if (getSharedUserId() || !currentUser) return; // Prevent deletion in shared mode
+
       updateSyncStatus('deleting...');
-      await getUserTasksRef().doc(id).delete();
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).delete();
     }
 
     function toggleLater() {
@@ -330,29 +343,17 @@
     }
 
     function handleDragStart(e, id) {
+      if (getSharedUserId()) return;
       draggedId = id;
       e.dataTransfer.setData('text/plain', id);
     }
 
     function allowDrop(e) {
-      e.preventDefault();
+      if (!getSharedUserId()) e.preventDefault();
     }
 
-function copyShareLink() {
-  if (!currentUser) return;
-  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${currentUser.uid}`;
-  navigator.clipboard.writeText(shareUrl).then(() => {
-    alert('Share link copied to clipboard!\n' + shareUrl);
-  });
-}
-    
-    // Checks if the URL has ?share=SOME_USER_ID
-    function getSharedUserId() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('share');
-    }
-    
     async function handleDrop(e, targetSection) {
+      if (getSharedUserId() || !currentUser) return;
       e.preventDefault();
       if (!draggedId) return;
 
@@ -363,7 +364,7 @@ function copyShareLink() {
       draggedId = null;
 
       updateSyncStatus('updating...');
-      await getUserTasksRef().doc(idToUpdate).update({
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(idToUpdate).update({
         list: targetSection,
         previousList: targetSection
       });
@@ -409,53 +410,53 @@ function copyShareLink() {
     }
 
     function createTaskElement(todo) {
-  const div = document.createElement('div');
-  const isReadOnly = Boolean(getSharedUserId());
-
-  if (!todo.completed && !isReadOnly) {
-    div.draggable = true;
-    div.ondragstart = (e) => handleDragStart(e, todo.id);
-  }
-
-  div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
-    todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'glow-box'
-  }`;
-
-  const createdStr = formatDate(todo.createdAt);
-  const completedStr = formatDate(todo.completedAt);
-
-  div.innerHTML = `
-    <div class="flex items-center justify-between min-w-0">
-      <div class="flex items-center gap-4 min-w-0">
-        <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
-        ${
-          isReadOnly
-            ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>`
-            : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">
-                ${todo.completed ? '[x]' : '[ ]'}
-               </button>`
-        }
-        <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">
-          ${todo.text}
-        </span>
-      </div>
-      ${
-        !isReadOnly
-          ? `<button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
-              [del]
-             </button>`
-          : ''
+      const div = document.createElement('div');
+      const isReadOnly = Boolean(getSharedUserId());
+      
+      if (!todo.completed && !isReadOnly) {
+        div.draggable = true;
+        div.ondragstart = (e) => handleDragStart(e, todo.id);
       }
-    </div>
-    
-    <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
-      ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
-      ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
-    </div>
-  `;
 
-  return div;
-}
+      div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
+        todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'glow-box'
+      } ${isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`;
+
+      const createdStr = formatDate(todo.createdAt);
+      const completedStr = formatDate(todo.completedAt);
+
+      div.innerHTML = `
+        <div class="flex items-center justify-between min-w-0">
+          <div class="flex items-center gap-4 min-w-0">
+            <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
+            ${
+              isReadOnly
+                ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>`
+                : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">
+                    ${todo.completed ? '[x]' : '[ ]'}
+                   </button>`
+            }
+            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">
+              ${todo.text}
+            </span>
+          </div>
+          ${
+            !isReadOnly
+              ? `<button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
+                  [del]
+                 </button>`
+              : ''
+          }
+        </div>
+        
+        <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
+          ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
+          ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
+        </div>
+      `;
+
+      return div;
+    }
   </script>
 </body>
 </html>

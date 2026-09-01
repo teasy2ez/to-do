@@ -49,20 +49,20 @@
       
       <div class="space-y-5 max-w-md">
         <div class="space-y-2">
-          <label class="text-base font-semibold text-emerald-400">email:</label>
-          <input id="auth-email" type="email" placeholder="user@terminal.com" class="w-full bg-black border-2 border-emerald-700 rounded-md px-4 py-2.5 text-base text-emerald-200 placeholder-emerald-800 focus:outline-none focus:border-emerald-400 glow-box"/>
+          <label class="text-sm font-semibold text-emerald-400">email:</label>
+          <input id="auth-email" type="email" placeholder="user@terminal.com" class="w-full bg-black border-2 border-emerald-700 rounded-md px-4 py-2.5 text-sm text-emerald-200 placeholder-emerald-800 focus:outline-none focus:border-emerald-400 glow-box"/>
         </div>
         
         <div class="space-y-2">
-          <label class="text-base font-semibold text-emerald-400">password:</label>
-          <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border-2 border-emerald-700 rounded-md px-4 py-2.5 text-base text-emerald-200 placeholder-emerald-800 focus:outline-none focus:border-emerald-400 glow-box"/>
+          <label class="text-sm font-semibold text-emerald-400">password:</label>
+          <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border-2 border-emerald-700 rounded-md px-4 py-2.5 text-sm text-emerald-200 placeholder-emerald-800 focus:outline-none focus:border-emerald-400 glow-box"/>
         </div>
 
         <div class="flex gap-4 pt-2">
-          <button onclick="login()" class="text-base bg-emerald-950 text-emerald-300 border-2 border-emerald-600 px-5 py-2 rounded-md hover:bg-emerald-900 font-bold glow-text">[login]</button>
-          <button onclick="signup()" class="text-base text-emerald-400 hover:text-emerald-200 px-3 py-2 font-semibold">[sign up]</button>
+          <button onclick="login()" class="text-sm bg-emerald-950 text-emerald-300 border-2 border-emerald-600 px-5 py-2 rounded-md hover:bg-emerald-900 font-bold glow-text">[login]</button>
+          <button onclick="signup()" class="text-sm text-emerald-400 hover:text-emerald-200 px-3 py-2 font-semibold">[sign up]</button>
         </div>
-        <p id="auth-msg" class="text-base text-amber-400 italic min-h-[1.25rem]"></p>
+        <p id="auth-msg" class="text-sm text-amber-400 italic min-h-[1.25rem]"></p>
       </div>
     </div>
 
@@ -74,35 +74,35 @@
         </div>
         <div class="flex items-center gap-5">
           <span id="sync-status" class="text-xs text-emerald-400 font-bold">synced</span>
-          <button onclick="logout()" class="text-base text-emerald-400 hover:text-emerald-100 font-bold">[logout]</button>
+          <button onclick="logout()" class="text-sm text-emerald-400 hover:text-emerald-100 font-bold">[logout]</button>
         </div>
       </header>
 
       <div class="space-y-3">
-        <div class="flex gap-5 text-base mb-2">
+        <div class="flex gap-5 text-sm mb-2">
           <button id="btn-now" onclick="setTarget('now')" class="text-emerald-300 font-bold underline glow-text">+ add to now</button>
           <button id="btn-later" onclick="setTarget('later')" class="text-emerald-500 hover:text-emerald-200 font-semibold">+ add to later</button>
         </div>
         <div class="flex items-center gap-3 bg-black border-2 border-emerald-700 rounded-md px-4 py-3 focus-within:border-emerald-400 glow-box">
-          <span class="text-base text-emerald-400 font-bold glow-text">></span>
+          <span class="text-sm text-emerald-400 font-bold glow-text">></span>
           <input
             id="task-input"
             type="text"
             placeholder="add task to now..."
-            class="w-full bg-transparent text-base text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
+            class="w-full bg-transparent text-sm text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
             onkeydown="if(event.key === 'Enter') addTask()"
           />
         </div>
       </div>
 
       <section>
-        <h2 class="text-base text-emerald-400 font-bold tracking-wider mb-3 glow-text">// now</h2>
+        <h2 class="text-sm text-emerald-400 font-bold tracking-wider mb-3 glow-text">// now</h2>
         <div id="list-now" class="space-y-2 min-h-[44px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
       </section>
 
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-900/80 pt-6">
-          <h2 class="text-base text-emerald-400 font-bold tracking-wider glow-text">// later</h2>
+          <h2 class="text-sm text-emerald-400 font-bold tracking-wider glow-text">// later</h2>
           <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-500 hover:text-emerald-300 font-semibold">[-] minimize</button>
         </div>
         <div id="list-later" class="space-y-2 min-h-[44px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
@@ -110,7 +110,7 @@
 
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-900/80 pt-6">
-          <h2 class="text-base text-emerald-500 font-bold tracking-wider">// completed</h2>
+          <h2 class="text-sm text-emerald-500 font-bold tracking-wider">// completed</h2>
           <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-500 hover:text-emerald-300 font-semibold">[-] minimize</button>
         </div>
         <div id="list-completed" class="space-y-2 min-h-[44px]"></div>
@@ -334,7 +334,7 @@
       const completedItems = todos.filter(t => t.completed);
 
       if (nowItems.length === 0) {
-        nowContainer.innerHTML = '<p class="text-base text-emerald-600/70 italic py-1">> empty</p>';
+        nowContainer.innerHTML = '<p class="text-sm text-emerald-600/70 italic py-1">> empty</p>';
       } else {
         nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
       }
@@ -342,7 +342,7 @@
       if (laterMinimized) {
         laterContainer.innerHTML = '';
       } else if (laterItems.length === 0) {
-        laterContainer.innerHTML = '<p class="text-base text-emerald-600/70 italic py-1">> empty</p>';
+        laterContainer.innerHTML = '<p class="text-sm text-emerald-600/70 italic py-1">> empty</p>';
       } else {
         laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
       }
@@ -350,7 +350,7 @@
       if (completedMinimized) {
         completedContainer.innerHTML = '';
       } else if (completedItems.length === 0) {
-        completedContainer.innerHTML = '<p class="text-base text-emerald-600/70 italic py-1">> empty</p>';
+        completedContainer.innerHTML = '<p class="text-sm text-emerald-600/70 italic py-1">> empty</p>';
       } else {
         completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
       }
@@ -376,15 +376,15 @@
       div.innerHTML = `
         <div class="flex items-center justify-between min-w-0">
           <div class="flex items-center gap-3.5 min-w-0">
-            <span class="text-emerald-400 select-none text-base font-bold">${todo.completed ? '•' : '⋮⋮'}</span>
-            <button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-300 hover:text-emerald-100 glow-text">
+            <span class="text-emerald-400 select-none text-sm font-bold">${todo.completed ? '•' : '⋮⋮'}</span>
+            <button onclick="toggleTask('${todo.id}')" class="text-sm font-bold text-emerald-300 hover:text-emerald-100 glow-text">
               ${todo.completed ? '[x]' : '[ ]'}
             </button>
-            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-600' : 'text-emerald-100'}">
+            <span class="text-sm font-medium ${todo.completed ? 'line-through text-emerald-600' : 'text-emerald-100'}">
               ${todo.text}
             </span>
           </div>
-          <button onclick="deleteTask('${todo.id}')" class="text-emerald-400 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
+          <button onclick="deleteTask('${todo.id}')" class="text-emerald-400 hover:text-rose-400 font-bold text-sm opacity-0 group-hover:opacity-100 transition-opacity px-1">
             [del]
           </button>
         </div>

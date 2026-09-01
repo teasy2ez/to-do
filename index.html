@@ -6,8 +6,9 @@
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Firebase Compatibility SDKs -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
   <style>
@@ -20,106 +21,191 @@
 </head>
 <body class="min-h-screen p-6 antialiased selection:bg-emerald-950 selection:text-emerald-300">
   <div class="max-w-xl mx-auto py-12">
-    <!-- Header -->
-    <header class="mb-8 border-b border-emerald-900/60 pb-4 flex justify-between items-center">
-      <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
-      <span id="sync-status" class="text-[10px] text-emerald-700">starting...</span>
-    </header>
+    
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="space-y-6">
+      <header class="border-b border-emerald-900/60 pb-4">
+        <h1 class="text-sm font-bold tracking-widest text-emerald-500">> terminal_auth.exe</h1>
+      </header>
+      
+      <div class="space-y-4 max-w-sm">
+        <div class="space-y-1">
+          <label class="text-xs text-emerald-700">email:</label>
+          <input id="auth-email" type="email" placeholder="user@terminal.com" class="w-full bg-black border border-emerald-900 rounded px-3 py-2 text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"/>
+        </div>
+        
+        <div class="space-y-1">
+          <label class="text-xs text-emerald-700">password:</label>
+          <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border border-emerald-900 rounded px-3 py-2 text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"/>
+        </div>
 
-    <!-- Input Area -->
-    <div class="mb-8 space-y-2">
-      <div class="flex gap-4 text-xs mb-2">
-        <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
-        <button id="btn-later" onclick="setTarget('later')" class="text-emerald-700 hover:text-emerald-300">+ add to later</button>
-      </div>
-      <div class="flex items-center gap-2 bg-black border border-emerald-900 rounded px-3 py-2 focus-within:border-emerald-500">
-        <span class="text-xs text-emerald-600">></span>
-        <input
-          id="task-input"
-          type="text"
-          placeholder="add task to now..."
-          class="w-full bg-transparent text-xs text-emerald-400 placeholder-emerald-800 focus:outline-none"
-          onkeydown="if(event.key === 'Enter') addTask()"
-        />
+        <div class="flex gap-3 pt-2">
+          <button onclick="login()" class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1.5 rounded hover:bg-emerald-900">[login]</button>
+          <button onclick="signup()" class="text-xs text-emerald-700 hover:text-emerald-400 px-3 py-1.5">[sign up]</button>
+        </div>
+        <p id="auth-msg" class="text-xs text-amber-500 italic min-h-[1rem]"></p>
       </div>
     </div>
 
-    <!-- Section: Now -->
-    <section class="mb-8">
-      <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
-      <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
-    </section>
+    <!-- App Screen (Hidden until logged in) -->
+    <div id="app-screen" class="hidden space-y-8">
+      <!-- Header -->
+      <header class="border-b border-emerald-900/60 pb-4 flex justify-between items-center">
+        <div>
+          <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
+          <span id="user-display" class="text-[10px] text-emerald-800">user: --</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span id="sync-status" class="text-[10px] text-emerald-700">synced</span>
+          <button onclick="logout()" class="text-xs text-emerald-800 hover:text-emerald-400">[logout]</button>
+        </div>
+      </header>
 
-    <!-- Section: Later -->
-    <section class="mb-8">
-      <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
-        <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
-        <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-700 hover:text-emerald-400">[-] minimize</button>
+      <!-- Input Area -->
+      <div class="space-y-2">
+        <div class="flex gap-4 text-xs mb-2">
+          <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
+          <button id="btn-later" onclick="setTarget('later')" class="text-emerald-700 hover:text-emerald-300">+ add to later</button>
+        </div>
+        <div class="flex items-center gap-2 bg-black border border-emerald-900 rounded px-3 py-2 focus-within:border-emerald-500">
+          <span class="text-xs text-emerald-600">></span>
+          <input
+            id="task-input"
+            type="text"
+            placeholder="add task to now..."
+            class="w-full bg-transparent text-xs text-emerald-400 placeholder-emerald-800 focus:outline-none"
+            onkeydown="if(event.key === 'Enter') addTask()"
+          />
+        </div>
       </div>
-      <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
-    </section>
 
-    <!-- Section: Completed -->
-    <section>
-      <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
-        <h2 class="text-xs text-emerald-800 uppercase tracking-wider">// completed</h2>
-        <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-800 hover:text-emerald-600">[-] minimize</button>
-      </div>
-      <div id="list-completed" class="space-y-1.5 min-h-[40px]"></div>
-    </section>
+      <!-- Section: Now -->
+      <section>
+        <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
+        <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
+      </section>
 
-    <!-- Footer -->
-    <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
-      <span id="storage-mode">status: offline storage</span>
-      <span id="pending-count">0 pending tasks</span>
-    </footer>
+      <!-- Section: Later -->
+      <section>
+        <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
+          <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
+          <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-700 hover:text-emerald-400">[-] minimize</button>
+        </div>
+        <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
+      </section>
+
+      <!-- Section: Completed -->
+      <section>
+        <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
+          <h2 class="text-xs text-emerald-800 uppercase tracking-wider">// completed</h2>
+          <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-800 hover:text-emerald-600">[-] minimize</button>
+        </div>
+        <div id="list-completed" class="space-y-1.5 min-h-[40px]"></div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
+        <span>status: authenticated</span>
+        <span id="pending-count">0 pending tasks</span>
+      </footer>
+    </div>
+
   </div>
 
   <script>
+    // --- PASTE YOUR FIREBASE CONFIG HERE ---
     const firebaseConfig = {
-      apiKey: "AIzaSyAAN10JXtcd4-ikgXCZxABGPYBRfDH5C5g",
-      authDomain: "to-do-t.firebaseapp.com",
-      projectId: "to-do-t",
-      storageBucket: "to-do-t.firebasestorage.app",
-      messagingSenderId: "862859632310",
-      appId: "1:862859632310:web:6ad0e655b25878b3025017"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
+    // ----------------------------------------
 
-    let db = null;
-    let isFirebaseReady = false;
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-    // Check if configuration has been replaced from placeholder
-    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
-      try {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        isFirebaseReady = true;
-      } catch (err) {
-        console.warn("Firebase initialization failed, using local storage:", err);
-      }
-    }
-
+    let currentUser = null;
+    let unsubscribeSync = null;
     let targetList = 'now';
     let laterMinimized = false;
     let completedMinimized = false;
     let draggedId = null;
+    let todos = [];
 
-    // Load initial tasks from local storage immediately so UI never flashes blank
-    let todos = JSON.parse(localStorage.getItem('terminal_todos_v2')) || [];
+    // Auth state observer
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app-screen').classList.remove('hidden');
+        document.getElementById('user-display').innerText = `user: ${user.email}`;
+        initSync();
+      } else {
+        currentUser = null;
+        if (unsubscribeSync) unsubscribeSync();
+        document.getElementById('app-screen').classList.add('hidden');
+        document.getElementById('auth-screen').classList.remove('hidden');
+      }
+    });
 
-    function saveLocal() {
-      localStorage.setItem('terminal_todos_v2', JSON.stringify(todos));
-      render();
+    async function login() {
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-pass').value;
+      const msg = document.getElementById('auth-msg');
+      msg.innerText = '';
+      
+      try {
+        await auth.signInWithEmailAndPassword(email, pass);
+      } catch (err) {
+        msg.innerText = `[error]: ${err.message.toLowerCase()}`;
+      }
+    }
+
+    async function signup() {
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-pass').value;
+      const msg = document.getElementById('auth-msg');
+      msg.innerText = '';
+
+      try {
+        await auth.createUserWithEmailAndPassword(email, pass);
+      } catch (err) {
+        msg.innerText = `[error]: ${err.message.toLowerCase()}`;
+      }
+    }
+
+    function logout() {
+      auth.signOut();
+    }
+
+    function getUserTasksRef() {
+      return db.collection('users').doc(currentUser.uid).collection('tasks');
+    }
+
+    function initSync() {
+      updateSyncStatus('connecting...');
+      unsubscribeSync = getUserTasksRef().onSnapshot((snapshot) => {
+        todos = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+        updateSyncStatus('synced');
+        render();
+      }, (error) => {
+        console.error(error);
+        updateSyncStatus('sync error');
+      });
     }
 
     function formatDate(val) {
       if (!val) return '';
-      let date;
-      if (val.toDate) {
-        date = val.toDate(); // Firebase Timestamp
-      } else {
-        date = new Date(val); // ISO String or ms
-      }
+      let date = val.toDate ? val.toDate() : new Date(val);
       if (isNaN(date.getTime())) return '';
 
       const year = date.getFullYear();
@@ -128,41 +214,6 @@
       const hours = String(date.getHours()).padStart(2, '0');
       const minutes = String(date.getMinutes()).padStart(2, '0');
       return `${year}/${month}/${day} - ${hours}:${minutes}`;
-    }
-
-    function initSync() {
-      if (!isFirebaseReady) {
-        updateSyncStatus('local mode');
-        document.getElementById('storage-mode').innerText = 'status: local storage';
-        render();
-        return;
-      }
-
-      document.getElementById('storage-mode').innerText = 'status: firebase cloud';
-      updateSyncStatus('connecting...');
-
-      // Listen without orderBy to avoid unindexed query silent drops
-      db.collection("tasks").onSnapshot((snapshot) => {
-        todos = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            // Normalize timestamps to ISO strings for uniform handling
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-            completedAt: data.completedAt?.toDate ? data.completedAt.toDate().toISOString() : data.completedAt
-          };
-        });
-
-        // Sort locally by creation date
-        todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-
-        saveLocal();
-        updateSyncStatus('synced');
-      }, (error) => {
-        console.error("Firestore sync error:", error);
-        updateSyncStatus('sync error (using local)');
-      });
     }
 
     function updateSyncStatus(msg) {
@@ -181,38 +232,19 @@
       const val = input.value.trim().toLowerCase();
       if (!val) return;
 
-      const nowIso = new Date().toISOString();
       const taskId = Date.now().toString();
-
       const newTask = {
-        id: taskId,
         text: val,
         completed: false,
         list: targetList,
         previousList: targetList,
-        createdAt: nowIso,
+        createdAt: new Date().toISOString(),
         completedAt: null
       };
 
       input.value = '';
-
-      // Instant local update
-      todos.push(newTask);
-      saveLocal();
-
-      if (isFirebaseReady) {
-        updateSyncStatus('saving...');
-        try {
-          await db.collection("tasks").doc(taskId).set({
-            ...newTask,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-          updateSyncStatus('synced');
-        } catch (err) {
-          console.error("Firebase write failed:", err);
-          updateSyncStatus('saved locally');
-        }
-      }
+      updateSyncStatus('saving...');
+      await getUserTasksRef().doc(taskId).set(newTask);
     }
 
     async function toggleTask(id) {
@@ -220,48 +252,25 @@
       if (!task) return;
 
       const isCompleting = !task.completed;
-      const nowIso = new Date().toISOString();
+      updateSyncStatus('updating...');
 
-      task.completed = isCompleting;
-      task.completedAt = isCompleting ? nowIso : null;
+      const updates = {
+        completed: isCompleting,
+        completedAt: isCompleting ? new Date().toISOString() : null
+      };
 
       if (isCompleting) {
-        task.previousList = task.list;
+        updates.previousList = task.list;
       } else if (task.previousList) {
-        task.list = task.previousList;
+        updates.list = task.previousList;
       }
 
-      saveLocal();
-
-      if (isFirebaseReady) {
-        updateSyncStatus('updating...');
-        try {
-          await db.collection("tasks").doc(id).update({
-            completed: task.completed,
-            completedAt: isCompleting ? firebase.firestore.FieldValue.serverTimestamp() : null,
-            list: task.list,
-            previousList: task.previousList || 'now'
-          });
-          updateSyncStatus('synced');
-        } catch (err) {
-          console.error("Firebase update failed:", err);
-        }
-      }
+      await getUserTasksRef().doc(id).update(updates);
     }
 
     async function deleteTask(id) {
-      todos = todos.filter(t => t.id !== id);
-      saveLocal();
-
-      if (isFirebaseReady) {
-        updateSyncStatus('deleting...');
-        try {
-          await db.collection("tasks").doc(id).delete();
-          updateSyncStatus('synced');
-        } catch (err) {
-          console.error("Firebase delete failed:", err);
-        }
-      }
+      updateSyncStatus('deleting...');
+      await getUserTasksRef().doc(id).delete();
     }
 
     function toggleLater() {
@@ -293,25 +302,14 @@
       const task = todos.find(t => t.id === draggedId);
       if (!task || task.completed || task.list === targetSection) return;
 
-      task.list = targetSection;
-      task.previousList = targetSection;
       const idToUpdate = draggedId;
       draggedId = null;
 
-      saveLocal();
-
-      if (isFirebaseReady) {
-        updateSyncStatus('updating...');
-        try {
-          await db.collection("tasks").doc(idToUpdate).update({
-            list: targetSection,
-            previousList: targetSection
-          });
-          updateSyncStatus('synced');
-        } catch (err) {
-          console.error("Firebase move failed:", err);
-        }
-      }
+      updateSyncStatus('updating...');
+      await getUserTasksRef().doc(idToUpdate).update({
+        list: targetSection,
+        previousList: targetSection
+      });
     }
 
     function render() {
@@ -395,10 +393,6 @@
 
       return div;
     }
-
-    // Initialize rendering and syncing immediately
-    render();
-    initSync();
   </script>
 </body>
 </html>

@@ -14,66 +14,75 @@
   <style>
     body {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      background-color: #000;
-      color: #10b981;
+      background-color: #030712; /* Slightly tinted black to prevent total contrast crush */
+      color: #34d399; /* Upgraded base green to Emerald 400 */
+    }
+
+    /* Terminal CRT Glow Effect for higher visual punch */
+    .glow-text {
+      text-shadow: 0 0 6px rgba(52, 211, 153, 0.4);
+    }
+    
+    .glow-border {
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
     }
   </style>
 </head>
-<body class="min-h-screen p-6 antialiased selection:bg-emerald-950 selection:text-emerald-300">
+<body class="min-h-screen p-6 antialiased selection:bg-emerald-900 selection:text-emerald-200">
   <div class="max-w-xl mx-auto py-12">
     
     <!-- Auth Screen -->
     <div id="auth-screen" class="space-y-6">
-      <header class="border-b border-emerald-900/60 pb-4">
-        <h1 class="text-sm font-bold tracking-widest text-emerald-500">> terminal_auth.exe</h1>
+      <header class="border-b border-emerald-800/80 pb-4">
+        <h1 class="text-sm font-bold tracking-widest text-emerald-400 glow-text">> terminal_auth.exe</h1>
       </header>
       
       <div class="space-y-4 max-w-sm">
         <div class="space-y-1">
-          <label class="text-xs text-emerald-700">email:</label>
-          <input id="auth-email" type="email" placeholder="user@terminal.com" class="w-full bg-black border border-emerald-900 rounded px-3 py-2 text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"/>
+          <label class="text-xs text-emerald-400">email:</label>
+          <input id="auth-email" type="email" placeholder="user@terminal.com" class="w-full bg-black border border-emerald-700/80 rounded px-3 py-2 text-xs text-emerald-300 placeholder-emerald-800 focus:outline-none focus:border-emerald-400"/>
         </div>
         
         <div class="space-y-1">
-          <label class="text-xs text-emerald-700">password:</label>
-          <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border border-emerald-900 rounded px-3 py-2 text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"/>
+          <label class="text-xs text-emerald-400">password:</label>
+          <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border border-emerald-700/80 rounded px-3 py-2 text-xs text-emerald-300 placeholder-emerald-800 focus:outline-none focus:border-emerald-400"/>
         </div>
 
         <div class="flex gap-3 pt-2">
-          <button onclick="login()" class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1.5 rounded hover:bg-emerald-900">[login]</button>
-          <button onclick="signup()" class="text-xs text-emerald-700 hover:text-emerald-400 px-3 py-1.5">[sign up]</button>
+          <button onclick="login()" class="text-xs bg-emerald-950 text-emerald-300 border border-emerald-600 px-3 py-1.5 rounded hover:bg-emerald-900 font-semibold">[login]</button>
+          <button onclick="signup()" class="text-xs text-emerald-400 hover:text-emerald-200 px-3 py-1.5">[sign up]</button>
         </div>
-        <p id="auth-msg" class="text-xs text-amber-500 italic min-h-[1rem]"></p>
+        <p id="auth-msg" class="text-xs text-amber-400 italic min-h-[1rem]"></p>
       </div>
     </div>
 
     <!-- App Screen (Hidden until logged in) -->
     <div id="app-screen" class="hidden space-y-8">
       <!-- Header -->
-      <header class="border-b border-emerald-900/60 pb-4 flex justify-between items-center">
+      <header class="border-b border-emerald-800/80 pb-4 flex justify-between items-center">
         <div>
-          <h1 class="text-sm font-bold tracking-widest text-emerald-500">> task_manager.exe</h1>
-          <span id="user-display" class="text-[10px] text-emerald-800">user: --</span>
+          <h1 class="text-sm font-bold tracking-widest text-emerald-400 glow-text">> task_manager.exe</h1>
+          <span id="user-display" class="text-[11px] text-emerald-400/80">user: --</span>
         </div>
         <div class="flex items-center gap-4">
-          <span id="sync-status" class="text-[10px] text-emerald-700">synced</span>
-          <button onclick="logout()" class="text-xs text-emerald-800 hover:text-emerald-400">[logout]</button>
+          <span id="sync-status" class="text-[11px] text-emerald-400/90 font-mono">synced</span>
+          <button onclick="logout()" class="text-xs text-emerald-500 hover:text-emerald-200 font-bold">[logout]</button>
         </div>
       </header>
 
       <!-- Input Area -->
       <div class="space-y-2">
         <div class="flex gap-4 text-xs mb-2">
-          <button id="btn-now" onclick="setTarget('now')" class="text-emerald-400 font-bold underline">+ add to now</button>
-          <button id="btn-later" onclick="setTarget('later')" class="text-emerald-700 hover:text-emerald-300">+ add to later</button>
+          <button id="btn-now" onclick="setTarget('now')" class="text-emerald-300 font-bold underline">+ add to now</button>
+          <button id="btn-later" onclick="setTarget('later')" class="text-emerald-500 hover:text-emerald-200">+ add to later</button>
         </div>
-        <div class="flex items-center gap-2 bg-black border border-emerald-900 rounded px-3 py-2 focus-within:border-emerald-500">
-          <span class="text-xs text-emerald-600">></span>
+        <div class="flex items-center gap-2 bg-black border border-emerald-700/80 rounded px-3 py-2 focus-within:border-emerald-400 glow-border">
+          <span class="text-xs text-emerald-400 font-bold">></span>
           <input
             id="task-input"
             type="text"
             placeholder="add task to now..."
-            class="w-full bg-transparent text-xs text-emerald-400 placeholder-emerald-800 focus:outline-none"
+            class="w-full bg-transparent text-xs text-emerald-200 placeholder-emerald-700 focus:outline-none"
             onkeydown="if(event.key === 'Enter') addTask()"
           />
         </div>
@@ -81,30 +90,30 @@
 
       <!-- Section: Now -->
       <section>
-        <h2 class="text-xs text-emerald-600 uppercase tracking-wider mb-3">// now</h2>
+        <h2 class="text-xs text-emerald-400 font-bold tracking-wider mb-3">// now</h2>
         <div id="list-now" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
       </section>
 
       <!-- Section: Later -->
       <section>
-        <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
-          <h2 class="text-xs text-emerald-600 uppercase tracking-wider">// later</h2>
-          <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-700 hover:text-emerald-400">[-] minimize</button>
+        <div class="flex items-center justify-between mb-3 border-t border-emerald-900/80 pt-6">
+          <h2 class="text-xs text-emerald-400 font-bold tracking-wider">// later</h2>
+          <button id="btn-toggle-later" onclick="toggleLater()" class="text-xs text-emerald-500 hover:text-emerald-300">[-] minimize</button>
         </div>
         <div id="list-later" class="space-y-1.5 min-h-[40px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
       </section>
 
       <!-- Section: Completed -->
       <section>
-        <div class="flex items-center justify-between mb-3 border-t border-emerald-950 pt-6">
-          <h2 class="text-xs text-emerald-800 uppercase tracking-wider">// completed</h2>
-          <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-800 hover:text-emerald-600">[-] minimize</button>
+        <div class="flex items-center justify-between mb-3 border-t border-emerald-900/80 pt-6">
+          <h2 class="text-xs text-emerald-500 font-bold tracking-wider">// completed</h2>
+          <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-xs text-emerald-500 hover:text-emerald-300">[-] minimize</button>
         </div>
         <div id="list-completed" class="space-y-1.5 min-h-[40px]"></div>
       </section>
 
       <!-- Footer -->
-      <footer class="mt-12 text-[10px] text-emerald-800 border-t border-emerald-950 pt-4 flex justify-between">
+      <footer class="mt-12 text-[11px] text-emerald-500/90 border-t border-emerald-900/80 pt-4 flex justify-between">
         <span>status: authenticated</span>
         <span id="pending-count">0 pending tasks</span>
       </footer>

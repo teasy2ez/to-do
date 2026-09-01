@@ -161,6 +161,7 @@
     let draggedId = null;
     let todos = [];
     let collapsedSublists = {};
+    let activeSubtaskInputId = null;
 
     function getSharedUserId() {
       const params = new URLSearchParams(window.location.search);
@@ -220,7 +221,6 @@
 
       try {
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-        // Save profile email for shared link identification
         await db.collection('users').doc(userCred.user.uid).set({
           email: email
         }, { merge: true });
@@ -363,11 +363,21 @@
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).delete();
     }
 
-    /* Subtask Functions */
-    async function addSubtask(taskId) {
+    /* Subtask Inline & Management Functions */
+    function toggleSubtaskInput(taskId) {
+      if (getSharedUserId()) return;
+      activeSubtaskInputId = activeSubtaskInputId === taskId ? null : taskId;
+      render();
+    }
+
+    async function submitSubtask(taskId) {
       if (getSharedUserId() || !currentUser) return;
-      const text = prompt('enter subtask title:');
-      if (!text || !text.trim()) return;
+      
+      const input = document.getElementById(`subtask-input-${taskId}`);
+      if (!input) return;
+
+      const text = input.value.trim().toLowerCase();
+      if (!text) return;
 
       const task = todos.find(t => t.id === taskId);
       if (!task) return;
@@ -375,7 +385,7 @@
       const subtasks = task.subtasks || [];
       const newSubtask = {
         id: Date.now().toString(),
-        text: text.trim().toLowerCase(),
+        text: text,
         completed: false
       };
 
@@ -383,6 +393,8 @@
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
         subtasks: [...subtasks, newSubtask]
       });
+
+      activeSubtaskInputId = taskId;
     }
 
     async function toggleSubtask(taskId, subtaskId) {
@@ -505,6 +517,7 @@
       const isReadOnly = Boolean(getSharedUserId());
       const subtasks = todo.subtasks || [];
       const isCollapsed = Boolean(collapsedSublists[todo.id]);
+      const isInputActive = activeSubtaskInputId === todo.id;
       
       if (!todo.completed && !isReadOnly) {
         div.draggable = true;
@@ -518,6 +531,7 @@
       const createdStr = formatDate(todo.createdAt);
       const completedStr = formatDate(todo.completedAt);
 
+      // Subtask List HTML
       let subtasksHtml = '';
       if (subtasks.length > 0 && !isCollapsed) {
         subtasksHtml = `
@@ -549,6 +563,27 @@
         `;
       }
 
+      // Inline Subtask Input Form HTML
+      let inlineInputHtml = '';
+      if (isInputActive && !isReadOnly) {
+        inlineInputHtml = `
+          <div class="mt-3 pl-8 border-l-2 border-emerald-600">
+            <div class="flex items-center gap-2 bg-black border border-emerald-600 rounded px-2.5 py-1.5">
+              <span class="text-xs text-emerald-400 font-bold">></span>
+              <input
+                id="subtask-input-${todo.id}"
+                type="text"
+                placeholder="add subtask... (press enter)"
+                class="w-full bg-transparent text-xs text-emerald-100 placeholder-emerald-700 focus:outline-none"
+                onkeydown="if(event.key === 'Enter') submitSubtask('${todo.id}'); if(event.key === 'Escape') toggleSubtaskInput('${todo.id}');"
+              />
+              <button onclick="submitSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold px-1">[add]</button>
+              <button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-600 hover:text-emerald-400 font-bold px-1">[x]</button>
+            </div>
+          </div>
+        `;
+      }
+
       div.innerHTML = `
         <div class="flex items-center justify-between min-w-0">
           <div class="flex items-center gap-4 min-w-0">
@@ -574,7 +609,7 @@
             }
             ${
               !isReadOnly
-                ? `<button onclick="addSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                ? `<button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
                     + subtask
                    </button>
                    <button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
@@ -591,7 +626,15 @@
         </div>
 
         ${subtasksHtml}
+        ${inlineInputHtml}
       `;
+
+      if (isInputActive) {
+        setTimeout(() => {
+          const el = document.getElementById(`subtask-input-${todo.id}`);
+          if (el) el.focus();
+        }, 50);
+      }
 
       return div;
     }

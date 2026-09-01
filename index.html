@@ -84,6 +84,9 @@
         <div>
           <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> task_manager.exe</h1>
           <span id="user-display" class="text-sm text-emerald-300/90 font-medium">user: --</span>
+          <button onclick="copyShareLink()" class="text-sm text-emerald-300 hover:text-emerald-100 font-bold glow-text">
+  [share list]
+</button>
         </div>
         <div class="flex items-center gap-5">
           <span id="sync-status" class="text-sm text-emerald-300 font-bold glow-text">synced</span>
@@ -217,21 +220,32 @@
     }
 
     function initSync() {
-      updateSyncStatus('connecting...');
-      unsubscribeSync = getUserTasksRef().onSnapshot((snapshot) => {
-        todos = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+      const sharedUid = getSharedUserId();
+      // If ?share= is in URL, fetch that user's list; otherwise fetch logged-in user's list
+      const targetUid = sharedUid || (currentUser ? currentUser.uid : null);
 
-        todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-        updateSyncStatus('synced');
-        render();
-      }, (error) => {
-        console.error(error);
-        updateSyncStatus('sync error');
-      });
-    }
+      if (!targetUid) return;
+
+      updateSyncStatus(sharedUid ? 'viewing shared list' : 'connecting...');
+
+      // Unsubscribe from prior listener if active
+      if (unsubscribeSync) unsubscribeSync();
+
+      unsubscribeSync = db.collection('users').doc(targetUid).collection('tasks')
+        .onSnapshot((snapshot) => {
+          todos = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+      }));
+
+      todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+      updateSyncStatus(sharedUid ? 'read-only' : 'synced');
+      render();
+    }, (error) => {
+      console.error(error);
+      updateSyncStatus('access denied or error');
+    });
+}
 
     function formatDate(val) {
       if (!val) return '';
@@ -324,6 +338,20 @@
       e.preventDefault();
     }
 
+function copyShareLink() {
+  if (!currentUser) return;
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${currentUser.uid}`;
+  navigator.clipboard.writeText(shareUrl).then(() => {
+    alert('Share link copied to clipboard!\n' + shareUrl);
+  });
+}
+    
+    // Checks if the URL has ?share=SOME_USER_ID
+    function getSharedUserId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('share');
+    }
+    
     async function handleDrop(e, targetSection) {
       e.preventDefault();
       if (!draggedId) return;
@@ -381,44 +409,53 @@
     }
 
     function createTaskElement(todo) {
-      const div = document.createElement('div');
-      
-      if (!todo.completed) {
-        div.draggable = true;
-        div.ondragstart = (e) => handleDragStart(e, todo.id);
+  const div = document.createElement('div');
+  const isReadOnly = Boolean(getSharedUserId());
+
+  if (!todo.completed && !isReadOnly) {
+    div.draggable = true;
+    div.ondragstart = (e) => handleDragStart(e, todo.id);
+  }
+
+  div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
+    todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'glow-box'
+  }`;
+
+  const createdStr = formatDate(todo.createdAt);
+  const completedStr = formatDate(todo.completedAt);
+
+  div.innerHTML = `
+    <div class="flex items-center justify-between min-w-0">
+      <div class="flex items-center gap-4 min-w-0">
+        <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
+        ${
+          isReadOnly
+            ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>`
+            : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">
+                ${todo.completed ? '[x]' : '[ ]'}
+               </button>`
+        }
+        <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">
+          ${todo.text}
+        </span>
+      </div>
+      ${
+        !isReadOnly
+          ? `<button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
+              [del]
+             </button>`
+          : ''
       }
+    </div>
+    
+    <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
+      ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
+      ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
+    </div>
+  `;
 
-      div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
-        todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'cursor-grab active:cursor-grabbing glow-box'
-      }`;
-
-      const createdStr = formatDate(todo.createdAt);
-      const completedStr = formatDate(todo.completedAt);
-
-      div.innerHTML = `
-        <div class="flex items-center justify-between min-w-0">
-          <div class="flex items-center gap-4 min-w-0">
-            <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
-            <button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">
-              ${todo.completed ? '[x]' : '[ ]'}
-            </button>
-            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">
-              ${todo.text}
-            </span>
-          </div>
-          <button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
-            [del]
-          </button>
-        </div>
-        
-        <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
-          ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
-          ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
-        </div>
-      `;
-
-      return div;
-    }
+  return div;
+}
   </script>
 </body>
 </html>

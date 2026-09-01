@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#010409" />
   
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -175,7 +178,10 @@
         document.getElementById('auth-screen').classList.remove('hidden');
       }
     });
-
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('Service Worker Registered'));
+    }
     async function login() {
       const email = document.getElementById('auth-email').value;
       const pass = document.getElementById('auth-pass').value;

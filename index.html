@@ -6,6 +6,7 @@
   <title>terminal to-do</title>
   <script src="https://cdn.tailwindcss.com"></script>
   
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -47,6 +48,7 @@
 
   <div class="max-w-2xl mx-auto py-10 relative z-10">
     
+    <!-- Auth Screen -->
     <div id="auth-screen" class="space-y-8">
       <header class="border-b-2 border-emerald-600 pb-5">
         <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> terminal_auth.exe</h1>
@@ -71,7 +73,9 @@
       </div>
     </div>
 
+    <!-- App Screen -->
     <div id="app-screen" class="hidden space-y-8">
+      <!-- Header -->
       <header class="border-b-2 border-emerald-600 pb-5 flex justify-between items-center">
         <div>
           <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> task_manager.exe</h1>
@@ -84,6 +88,7 @@
         </div>
       </header>
 
+      <!-- Input Area (Hidden when in shared mode) -->
       <div id="input-container" class="space-y-3">
         <div class="flex gap-6 text-base mb-2">
           <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
@@ -101,11 +106,13 @@
         </div>
       </div>
 
+      <!-- Section: Now -->
       <section>
         <h2 class="text-base text-emerald-300 font-bold tracking-wider mb-3 glow-text">// now</h2>
         <div id="list-now" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
       </section>
 
+      <!-- Section: Later -->
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
           <h2 class="text-base text-emerald-300 font-bold tracking-wider glow-text">// later</h2>
@@ -114,6 +121,7 @@
         <div id="list-later" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
       </section>
 
+      <!-- Section: Completed -->
       <section>
         <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
           <h2 class="text-base text-emerald-400 font-bold tracking-wider">// completed</h2>
@@ -122,6 +130,7 @@
         <div id="list-completed" class="space-y-2.5 min-h-[48px]"></div>
       </section>
 
+      <!-- Footer -->
       <footer class="mt-12 text-sm text-emerald-400/90 border-t-2 border-emerald-800/80 pt-5 flex justify-between font-medium">
         <span id="auth-status-display">status: authenticated</span>
         <span id="pending-count">0 pending tasks</span>
@@ -151,6 +160,7 @@
     let completedMinimized = false;
     let draggedId = null;
     let todos = [];
+    let collapsedSublists = {};
 
     function getSharedUserId() {
       const params = new URLSearchParams(window.location.search);
@@ -162,13 +172,13 @@
       const sharedUid = getSharedUserId();
 
       if (sharedUid) {
-        // Shared Read-Only Mode (No login required)
+        // Shared Read-Only Mode
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-screen').classList.remove('hidden');
-        document.getElementById('input-container').classList.add('hidden'); // Hide input controls
+        document.getElementById('input-container').classList.add('hidden');
         document.getElementById('btn-share').classList.add('hidden');
         document.getElementById('btn-logout').classList.add('hidden');
-        document.getElementById('user-display').innerText = `mode: read-only viewer`;
+        document.getElementById('user-display').innerText = `user: viewing shared list`;
         document.getElementById('auth-status-display').innerText = `status: shared view`;
         initSync();
       } else if (user) {
@@ -209,7 +219,11 @@
       msg.innerText = '';
 
       try {
-        await auth.createUserWithEmailAndPassword(email, pass);
+        const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+        // Save profile email for shared link identification
+        await db.collection('users').doc(userCred.user.uid).set({
+          email: email
+        }, { merge: true });
       } catch (err) {
         msg.innerText = `[error]: ${err.message.toLowerCase()}`;
       }
@@ -227,11 +241,28 @@
       });
     }
 
+    async function fetchOwnerEmail(sharedUid) {
+      try {
+        const userDoc = await db.collection('users').doc(sharedUid).get();
+        if (userDoc.exists && userDoc.data().email) {
+          document.getElementById('user-display').innerText = `user: viewing ${userDoc.data().email}'s list`;
+        } else {
+          document.getElementById('user-display').innerText = `user: viewing shared list (${sharedUid.substring(0, 6)}...)`;
+        }
+      } catch (err) {
+        console.error("Could not fetch owner email:", err);
+      }
+    }
+
     function initSync() {
       const sharedUid = getSharedUserId();
       const targetUid = sharedUid || (currentUser ? currentUser.uid : null);
 
       if (!targetUid) return;
+
+      if (sharedUid) {
+        fetchOwnerEmail(sharedUid);
+      }
 
       updateSyncStatus(sharedUid ? 'loading shared tasks...' : 'connecting...');
 
@@ -241,6 +272,7 @@
         .onSnapshot((snapshot) => {
           todos = snapshot.docs.map(doc => ({
             id: doc.id,
+            subtasks: [],
             ...doc.data()
           }));
 
@@ -279,7 +311,7 @@
     }
 
     async function addTask() {
-      if (getSharedUserId() || !currentUser) return; // Prevent adding in shared mode
+      if (getSharedUserId() || !currentUser) return;
       
       const input = document.getElementById('task-input');
       const val = input.value.trim().toLowerCase();
@@ -292,7 +324,8 @@
         list: targetList,
         previousList: targetList,
         createdAt: new Date().toISOString(),
-        completedAt: null
+        completedAt: null,
+        subtasks: []
       };
 
       input.value = '';
@@ -301,7 +334,7 @@
     }
 
     async function toggleTask(id) {
-      if (getSharedUserId() || !currentUser) return; // Prevent toggling in shared mode
+      if (getSharedUserId() || !currentUser) return;
 
       const task = todos.find(t => t.id === id);
       if (!task) return;
@@ -324,10 +357,68 @@
     }
 
     async function deleteTask(id) {
-      if (getSharedUserId() || !currentUser) return; // Prevent deletion in shared mode
+      if (getSharedUserId() || !currentUser) return;
 
       updateSyncStatus('deleting...');
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).delete();
+    }
+
+    /* Subtask Functions */
+    async function addSubtask(taskId) {
+      if (getSharedUserId() || !currentUser) return;
+      const text = prompt('enter subtask title:');
+      if (!text || !text.trim()) return;
+
+      const task = todos.find(t => t.id === taskId);
+      if (!task) return;
+
+      const subtasks = task.subtasks || [];
+      const newSubtask = {
+        id: Date.now().toString(),
+        text: text.trim().toLowerCase(),
+        completed: false
+      };
+
+      updateSyncStatus('adding subtask...');
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
+        subtasks: [...subtasks, newSubtask]
+      });
+    }
+
+    async function toggleSubtask(taskId, subtaskId) {
+      if (getSharedUserId() || !currentUser) return;
+      const task = todos.find(t => t.id === taskId);
+      if (!task || !task.subtasks) return;
+
+      const updatedSubtasks = task.subtasks.map(s => {
+        if (s.id === subtaskId) {
+          return { ...s, completed: !s.completed };
+        }
+        return s;
+      });
+
+      updateSyncStatus('updating subtask...');
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
+        subtasks: updatedSubtasks
+      });
+    }
+
+    async function deleteSubtask(taskId, subtaskId) {
+      if (getSharedUserId() || !currentUser) return;
+      const task = todos.find(t => t.id === taskId);
+      if (!task || !task.subtasks) return;
+
+      const updatedSubtasks = task.subtasks.filter(s => s.id !== subtaskId);
+
+      updateSyncStatus('deleting subtask...');
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
+        subtasks: updatedSubtasks
+      });
+    }
+
+    function toggleSublistCollapse(taskId) {
+      collapsedSublists[taskId] = !collapsedSublists[taskId];
+      render();
     }
 
     function toggleLater() {
@@ -412,6 +503,8 @@
     function createTaskElement(todo) {
       const div = document.createElement('div');
       const isReadOnly = Boolean(getSharedUserId());
+      const subtasks = todo.subtasks || [];
+      const isCollapsed = Boolean(collapsedSublists[todo.id]);
       
       if (!todo.completed && !isReadOnly) {
         div.draggable = true;
@@ -424,6 +517,37 @@
 
       const createdStr = formatDate(todo.createdAt);
       const completedStr = formatDate(todo.completedAt);
+
+      let subtasksHtml = '';
+      if (subtasks.length > 0 && !isCollapsed) {
+        subtasksHtml = `
+          <div class="mt-3 pl-8 space-y-1.5 border-l-2 border-emerald-800/80">
+            ${subtasks.map(s => `
+              <div class="flex items-center justify-between text-sm group/sub font-medium">
+                <div class="flex items-center gap-2">
+                  ${
+                    isReadOnly
+                      ? `<span class="text-emerald-500">${s.completed ? '[x]' : '[ ]'}</span>`
+                      : `<button onclick="toggleSubtask('${todo.id}', '${s.id}')" class="text-emerald-300 hover:text-emerald-100">
+                          ${s.completed ? '[x]' : '[ ]'}
+                         </button>`
+                  }
+                  <span class="${s.completed ? 'line-through text-emerald-600' : 'text-emerald-200'}">
+                    ${s.text}
+                  </span>
+                </div>
+                ${
+                  !isReadOnly
+                    ? `<button onclick="deleteSubtask('${todo.id}', '${s.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover/sub:opacity-100 transition-opacity">
+                        [del]
+                       </button>`
+                    : ''
+                }
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
 
       div.innerHTML = `
         <div class="flex items-center justify-between min-w-0">
@@ -440,19 +564,33 @@
               ${todo.text}
             </span>
           </div>
-          ${
-            !isReadOnly
-              ? `<button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
-                  [del]
-                 </button>`
-              : ''
-          }
+          <div class="flex items-center gap-3">
+            ${
+              subtasks.length > 0
+                ? `<button onclick="toggleSublistCollapse('${todo.id}')" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold">
+                    ${isCollapsed ? `[+] ${subtasks.length} subtasks` : '[-] minimize'}
+                   </button>`
+                : ''
+            }
+            ${
+              !isReadOnly
+                ? `<button onclick="addSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                    + subtask
+                   </button>
+                   <button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
+                    [del]
+                   </button>`
+                : ''
+            }
+          </div>
         </div>
         
         <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
           ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
           ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
         </div>
+
+        ${subtasksHtml}
       `;
 
       return div;

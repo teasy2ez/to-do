@@ -88,7 +88,7 @@
         </div>
       </header>
 
-      <!-- Input Area (Hidden when in shared mode) -->
+      <!-- Input Area -->
       <div id="input-container" class="space-y-3">
         <div class="flex gap-6 text-base mb-2">
           <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
@@ -173,7 +173,6 @@
       const sharedUid = getSharedUserId();
 
       if (sharedUid) {
-        // Shared Read-Only Mode
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-screen').classList.remove('hidden');
         document.getElementById('input-container').classList.add('hidden');
@@ -183,7 +182,6 @@
         document.getElementById('auth-status-display').innerText = `status: shared view`;
         initSync();
       } else if (user) {
-        // Logged-in Owner Mode
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-screen').classList.remove('hidden');
         document.getElementById('input-container').classList.remove('hidden');
@@ -193,7 +191,6 @@
         document.getElementById('auth-status-display').innerText = `status: authenticated`;
         initSync();
       } else {
-        // Logged-out Mode
         if (unsubscribeSync) unsubscribeSync();
         document.getElementById('app-screen').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
@@ -273,10 +270,11 @@
           todos = snapshot.docs.map(doc => ({
             id: doc.id,
             subtasks: [],
+            order: doc.data().order ?? new Date(doc.data().createdAt || 0).getTime(),
             ...doc.data()
           }));
 
-          todos.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+          todos.sort((a, b) => a.order - b.order);
           updateSyncStatus(sharedUid ? 'read-only mode' : 'synced');
           render();
         }, (error) => {
@@ -318,6 +316,7 @@
       if (!val) return;
 
       const taskId = Date.now().toString();
+      const now = Date.now();
       const newTask = {
         text: val,
         completed: false,
@@ -325,6 +324,7 @@
         previousList: targetList,
         createdAt: new Date().toISOString(),
         completedAt: null,
+        order: now,
         subtasks: []
       };
 
@@ -363,7 +363,6 @@
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).delete();
     }
 
-    /* Subtask Inline & Management Functions */
     function toggleSubtaskInput(taskId) {
       if (getSharedUserId()) return;
       activeSubtaskInputId = activeSubtaskInputId === taskId ? null : taskId;
@@ -449,28 +448,70 @@
       if (getSharedUserId()) return;
       draggedId = id;
       e.dataTransfer.setData('text/plain', id);
+      e.stopPropagation();
     }
 
     function allowDrop(e) {
       if (!getSharedUserId()) e.preventDefault();
     }
 
-    async function handleDrop(e, targetSection) {
-      if (getSharedUserId() || !currentUser) return;
+    async function handleDropOnTask(e, targetTaskId) {
+      if (getSharedUserId() || !currentUser || !draggedId || draggedId === targetTaskId) return;
       e.preventDefault();
-      if (!draggedId) return;
+      e.stopPropagation();
+
+      const sourceTask = todos.find(t => t.id === draggedId);
+      const targetTask = todos.find(t => t.id === targetTaskId);
+      if (!sourceTask || !targetTask) return;
+
+      const targetSection = targetTask.list;
+      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
+      const targetIdx = sectionTasks.findIndex(t => t.id === targetTaskId);
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      const insertIdx = offset > rect.height / 2 ? targetIdx + 1 : targetIdx;
+
+      sectionTasks.splice(insertIdx, 0, sourceTask);
+
+      updateSyncStatus('reordering...');
+      const batch = db.batch();
+      sectionTasks.forEach((t, idx) => {
+        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
+        batch.update(ref, {
+          order: idx,
+          list: targetSection,
+          previousList: targetSection
+        });
+      });
+
+      draggedId = null;
+      await batch.commit();
+    }
+
+    async function handleDrop(e, targetSection) {
+      if (getSharedUserId() || !currentUser || !draggedId) return;
+      e.preventDefault();
 
       const task = todos.find(t => t.id === draggedId);
-      if (!task || task.completed || task.list === targetSection) return;
+      if (!task || task.completed) return;
 
-      const idToUpdate = draggedId;
-      draggedId = null;
+      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
+      sectionTasks.push(task);
 
       updateSyncStatus('updating...');
-      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(idToUpdate).update({
-        list: targetSection,
-        previousList: targetSection
+      const batch = db.batch();
+      sectionTasks.forEach((t, idx) => {
+        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
+        batch.update(ref, {
+          order: idx,
+          list: targetSection,
+          previousList: targetSection
+        });
       });
+
+      draggedId = null;
+      await batch.commit();
     }
 
     function render() {
@@ -522,6 +563,8 @@
       if (!todo.completed && !isReadOnly) {
         div.draggable = true;
         div.ondragstart = (e) => handleDragStart(e, todo.id);
+        div.ondragover = (e) => allowDrop(e);
+        div.ondrop = (e) => handleDropOnTask(e, todo.id);
       }
 
       div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
@@ -531,7 +574,6 @@
       const createdStr = formatDate(todo.createdAt);
       const completedStr = formatDate(todo.completedAt);
 
-      // Subtask List HTML
       let subtasksHtml = '';
       if (subtasks.length > 0 && !isCollapsed) {
         subtasksHtml = `
@@ -563,7 +605,6 @@
         `;
       }
 
-      // Inline Subtask Input Form HTML
       let inlineInputHtml = '';
       if (isInputActive && !isReadOnly) {
         inlineInputHtml = `

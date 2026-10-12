@@ -97,6 +97,7 @@
           <button id="tab-tasks" onclick="switchTab('tasks')" class="text-emerald-200 font-bold underline glow-text whitespace-nowrap">> tasks.exe</button>
           <button id="tab-health" onclick="switchTab('health')" class="text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap">> health_daily.exe</button>
           <button id="tab-budget" onclick="switchTab('budget')" class="text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap">> budget_tracker.exe</button>
+          <button id="tab-journal" onclick="switchTab('journal')" class="text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap">> journal_log.exe</button>
         </div>
       </header>
 
@@ -284,6 +285,51 @@
         </section>
       </div>
 
+      <!-- ================= VIEW 4: JOURNAL LOG ================= -->
+      <div id="view-journal" class="app-view hidden space-y-6">
+        <div class="flex justify-between items-center border-b border-emerald-900/80 pb-3">
+          <div>
+            <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// daily_journal_log</h2>
+            <p class="text-xs text-emerald-400/80">Record daily thoughts and export formatted logs monthly.</p>
+          </div>
+        </div>
+
+        <!-- Journal Entry Input -->
+        <div class="space-y-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <label class="text-xs text-emerald-400 font-bold">// new journal entry</label>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-emerald-400">date:</span>
+              <input id="journal-date" type="date" class="bg-black border border-emerald-600 text-emerald-100 rounded px-2 py-1 focus:outline-none" />
+            </div>
+          </div>
+          <textarea
+            id="journal-content"
+            rows="4"
+            placeholder="write your daily log or journal entry here..."
+            class="w-full bg-black border border-emerald-700 rounded p-3 text-sm text-emerald-100 placeholder-emerald-700 focus:outline-none focus:border-emerald-400"
+          ></textarea>
+          <div class="flex justify-end">
+            <button onclick="addJournalEntry()" class="bg-emerald-950 text-emerald-200 border border-emerald-500 px-5 py-2 rounded font-bold hover:bg-emerald-900 glow-text text-sm">[save log entry]</button>
+          </div>
+        </div>
+
+        <!-- Monthly Export Controls & Past Logs -->
+        <section class="space-y-4 pt-2">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-emerald-800/80 pb-3">
+            <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// journal entries</h3>
+            
+            <!-- Export Filter Toolbar -->
+            <div class="flex items-center gap-2">
+              <input id="export-month" type="month" class="bg-black border border-emerald-600 text-xs text-emerald-200 rounded px-2 py-1 focus:outline-none" onchange="renderJournal()" />
+              <button onclick="exportMonthlyLog()" class="bg-emerald-900 border border-emerald-500 text-xs px-3 py-1 rounded font-bold text-emerald-200 hover:bg-emerald-800 glow-text">[export month to .txt]</button>
+            </div>
+          </div>
+
+          <div id="list-journal" class="space-y-3 max-h-96 overflow-y-auto"></div>
+        </section>
+      </div>
+
     </div>
   </div>
 
@@ -306,6 +352,7 @@
     let unsubTasks = null;
     let unsubHabits = null;
     let unsubExpenses = null;
+    let unsubJournal = null;
     let unsubUserConfig = null;
 
     let targetList = 'now';
@@ -316,6 +363,7 @@
     let todos = [];
     let habits = [];
     let expenses = [];
+    let journalEntries = [];
     let categories = ['food', 'groceries', 'transport', 'gear', 'bills', 'misc'];
     let monthStartDay = 1;
     let budgetHorizon = 'month';
@@ -327,6 +375,10 @@
       const params = new URLSearchParams(window.location.search);
       return params.get('share');
     }
+
+    // Set today as default date picker value
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentYearMonth = todayStr.substring(0, 7);
 
     auth.onAuthStateChanged((user) => {
       currentUser = user;
@@ -354,6 +406,7 @@
         if (unsubTasks) unsubTasks();
         if (unsubHabits) unsubHabits();
         if (unsubExpenses) unsubExpenses();
+        if (unsubJournal) unsubJournal();
         if (unsubUserConfig) unsubUserConfig();
         document.getElementById('app-screen').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
@@ -430,7 +483,7 @@
       currentTab = tab;
       document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
       document.getElementById(`view-${tab}`).classList.remove('hidden');
-      ['tasks', 'health', 'budget'].forEach(t => {
+      ['tasks', 'health', 'budget', 'journal'].forEach(t => {
         const btn = document.getElementById(`tab-${t}`);
         if (btn) {
           btn.className = t === tab ? 'text-emerald-200 font-bold underline glow-text whitespace-nowrap' : 'text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap';
@@ -447,9 +500,13 @@
       if (sharedUid) fetchOwnerEmail(sharedUid);
       updateSyncStatus('connecting...');
 
+      document.getElementById('journal-date').value = todayStr;
+      document.getElementById('export-month').value = currentYearMonth;
+
       if (unsubTasks) unsubTasks();
       if (unsubHabits) unsubHabits();
       if (unsubExpenses) unsubExpenses();
+      if (unsubJournal) unsubJournal();
       if (unsubUserConfig) unsubUserConfig();
 
       unsubUserConfig = db.collection('users').doc(targetUid).onSnapshot(doc => {
@@ -485,6 +542,12 @@
       unsubExpenses = db.collection('users').doc(targetUid).collection('expenses').onSnapshot((snapshot) => {
         expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         expenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        render();
+      });
+
+      unsubJournal = db.collection('users').doc(targetUid).collection('journal').onSnapshot((snapshot) => {
+        journalEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        journalEntries.sort((a, b) => new Date(b.entryDate) - new Date(a.entryDate));
         render();
       });
     }
@@ -852,11 +915,84 @@
       }
     }
 
+    // ================= JOURNAL FUNCTIONS =================
+    async function addJournalEntry() {
+      if (getSharedUserId() || !currentUser) return;
+      const dateInput = document.getElementById('journal-date');
+      const contentInput = document.getElementById('journal-content');
+
+      const entryDate = dateInput.value || todayStr;
+      const content = contentInput.value.trim();
+
+      if (!content) return;
+
+      const entryId = Date.now().toString();
+      const newEntry = {
+        entryDate: entryDate,
+        content: content,
+        createdAt: new Date().toISOString()
+      };
+
+      contentInput.value = '';
+      updateSyncStatus('saving journal entry...');
+      await db.collection('users').doc(currentUser.uid).collection('journal').doc(entryId).set(newEntry);
+      updateSyncStatus('synced');
+    }
+
+    async function deleteJournalEntry(entryId) {
+      if (getSharedUserId() || !currentUser) return;
+      await db.collection('users').doc(currentUser.uid).collection('journal').doc(entryId).delete();
+    }
+
+    function exportMonthlyLog() {
+      const selectedMonth = document.getElementById('export-month').value;
+      if (!selectedMonth) {
+        alert('Please select a month to export.');
+        return;
+      }
+
+      // Filter entries matching the selected YYYY-MM
+      const filteredEntries = journalEntries.filter(entry => entry.entryDate.startsWith(selectedMonth));
+
+      if (filteredEntries.length === 0) {
+        alert(`No journal entries found for ${selectedMonth}.`);
+        return;
+      }
+
+      // Sort chronologically ascending for the exported file
+      const sorted = [...filteredEntries].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
+
+      let exportText = `==================================================\n`;
+      exportText += `          TERMINAL OS - JOURNAL LOG EXPORT        \n`;
+      exportText += `          PERIOD: ${selectedMonth}                       \n`;
+      exportText += `==================================================\n\n`;
+
+      sorted.forEach(entry => {
+        exportText += `[DATE]: ${entry.entryDate}\n`;
+        exportText += `[CREATED AT]: ${formatDate(entry.createdAt)}\n`;
+        exportText += `--------------------------------------------------\n`;
+        exportText += `${entry.content}\n\n`;
+        exportText += `==================================================\n\n`;
+      });
+
+      // Download file blob
+      const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `journal_export_${selectedMonth.replace('-', '_')}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
     // ================= RENDER ENGINE =================
     function render() {
       if (currentTab === 'tasks') renderTasks();
       if (currentTab === 'health') renderHealth();
       if (currentTab === 'budget') renderBudget();
+      if (currentTab === 'journal') renderJournal();
     }
 
     function renderTasks() {
@@ -1084,6 +1220,38 @@
           listExpenses.appendChild(item);
         });
       }
+    }
+
+    function renderJournal() {
+      const container = document.getElementById('list-journal');
+      const selectedMonth = document.getElementById('export-month').value;
+      container.innerHTML = '';
+
+      let filtered = journalEntries;
+      if (selectedMonth) {
+        filtered = journalEntries.filter(e => e.entryDate.startsWith(selectedMonth));
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no journal entries found for this period</p>';
+        return;
+      }
+
+      filtered.forEach(e => {
+        const item = document.createElement('div');
+        item.className = 'group p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box space-y-2';
+        item.innerHTML = `
+          <div class="flex justify-between items-center border-b border-emerald-900/60 pb-2">
+            <span class="text-xs font-bold text-emerald-300 glow-text">// date: ${e.entryDate}</span>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-emerald-400/70">${formatDate(e.createdAt)}</span>
+              ${!getBooleanReadOnly() ? `<button onclick="deleteJournalEntry('${e.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">[del]</button>` : ''}
+            </div>
+          </div>
+          <p class="text-sm text-emerald-100 whitespace-pre-wrap leading-relaxed">${e.content}</p>
+        `;
+        container.appendChild(item);
+      });
     }
 
     function getBooleanReadOnly() {

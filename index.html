@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>terminal to-do</title>
+  <title>terminal os</title>
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Firebase SDKs -->
@@ -43,10 +43,10 @@
     }
   </style>
 </head>
-<body class="min-h-screen p-6 antialiased selection:bg-emerald-800 selection:text-emerald-100 relative">
+<body class="min-h-screen p-4 sm:p-6 antialiased selection:bg-emerald-800 selection:text-emerald-100 relative">
   <div class="fixed inset-0 crt-overlay z-50 pointer-events-none"></div>
 
-  <div class="max-w-2xl mx-auto py-10 relative z-10">
+  <div class="max-w-2xl mx-auto py-6 sm:py-10 relative z-10">
     
     <!-- Auth Screen -->
     <div id="auth-screen" class="space-y-8">
@@ -73,70 +73,178 @@
       </div>
     </div>
 
-    <!-- App Screen -->
-    <div id="app-screen" class="hidden space-y-8">
-      <!-- Header -->
-      <header class="border-b-2 border-emerald-600 pb-5 flex justify-between items-center">
-        <div>
-          <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> task_manager.exe</h1>
-          <span id="user-display" class="text-sm text-emerald-300/90 font-medium">user: --</span>
+    <!-- App Suite Screen -->
+    <div id="app-screen" class="hidden space-y-6">
+      <!-- Header & Navigation Switcher -->
+      <header class="border-b-2 border-emerald-600 pb-5 space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h1 class="text-xl font-bold tracking-widest text-emerald-300 glow-text">> terminal_os.exe</h1>
+            <span id="user-display" class="text-sm text-emerald-300/90 font-medium">user: --</span>
+          </div>
+          <div class="flex items-center gap-4 flex-wrap">
+            <span id="sync-status" class="text-sm text-emerald-300 font-bold glow-text">synced</span>
+            <button id="btn-share" onclick="copyShareLink()" class="text-sm text-emerald-300 hover:text-emerald-100 font-bold glow-text">[share list]</button>
+            <button id="btn-logout" onclick="logout()" class="text-sm text-emerald-300 hover:text-emerald-100 font-bold">[logout]</button>
+          </div>
         </div>
-        <div class="flex items-center gap-5">
-          <span id="sync-status" class="text-sm text-emerald-300 font-bold glow-text">synced</span>
-          <button id="btn-share" onclick="copyShareLink()" class="text-base text-emerald-300 hover:text-emerald-100 font-bold glow-text">[share list]</button>
-          <button id="btn-logout" onclick="logout()" class="text-base text-emerald-300 hover:text-emerald-100 font-bold">[logout]</button>
+
+        <!-- App Switcher Tabs -->
+        <div class="flex gap-6 text-sm sm:text-base pt-2 border-t border-emerald-900/60 overflow-x-auto">
+          <button id="tab-tasks" onclick="switchTab('tasks')" class="text-emerald-200 font-bold underline glow-text whitespace-nowrap">> tasks.exe</button>
+          <button id="tab-health" onclick="switchTab('health')" class="text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap">> health_daily.exe</button>
+          <button id="tab-budget" onclick="switchTab('budget')" class="text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap">> budget_tracker.exe</button>
         </div>
       </header>
 
-      <!-- Input Area -->
-      <div id="input-container" class="space-y-3">
-        <div class="flex gap-6 text-base mb-2">
-          <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
-          <button id="btn-later" onclick="setTarget('later')" class="text-emerald-400 hover:text-emerald-100 font-semibold">+ add to later</button>
+      <!-- ================= VIEW 1: TASKS ================= -->
+      <div id="view-tasks" class="app-view space-y-8">
+        <!-- Input Area -->
+        <div id="input-container" class="space-y-3">
+          <div class="flex gap-6 text-base mb-2">
+            <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
+            <button id="btn-later" onclick="setTarget('later')" class="text-emerald-400 hover:text-emerald-100 font-semibold">+ add to later</button>
+          </div>
+          <div class="flex items-center gap-3 bg-black border-2 border-emerald-600 rounded-md px-4 py-3.5 focus-within:border-emerald-400 glow-box">
+            <span class="text-base text-emerald-300 font-bold glow-text">></span>
+            <input
+              id="task-input"
+              type="text"
+              placeholder="add task to now..."
+              class="w-full bg-transparent text-base text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
+              onkeydown="if(event.key === 'Enter') addTask()"
+            />
+          </div>
         </div>
-        <div class="flex items-center gap-3 bg-black border-2 border-emerald-600 rounded-md px-4 py-3.5 focus-within:border-emerald-400 glow-box">
-          <span class="text-base text-emerald-300 font-bold glow-text">></span>
-          <input
-            id="task-input"
-            type="text"
-            placeholder="add task to now..."
-            class="w-full bg-transparent text-base text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
-            onkeydown="if(event.key === 'Enter') addTask()"
-          />
-        </div>
+
+        <!-- Section: Now -->
+        <section>
+          <h2 class="text-base text-emerald-300 font-bold tracking-wider mb-3 glow-text">// now</h2>
+          <div id="list-now" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
+        </section>
+
+        <!-- Section: Later -->
+        <section>
+          <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
+            <h2 class="text-base text-emerald-300 font-bold tracking-wider glow-text">// later</h2>
+            <button id="btn-toggle-later" onclick="toggleLater()" class="text-sm text-emerald-400 hover:text-emerald-200 font-semibold">[-] minimize</button>
+          </div>
+          <div id="list-later" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
+        </section>
+
+        <!-- Section: Completed -->
+        <section>
+          <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
+            <h2 class="text-base text-emerald-400 font-bold tracking-wider">// completed</h2>
+            <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-sm text-emerald-400 hover:text-emerald-200 font-semibold">[-] minimize</button>
+          </div>
+          <div id="list-completed" class="space-y-2.5 min-h-[48px]"></div>
+        </section>
+
+        <footer class="mt-12 text-sm text-emerald-400/90 border-t-2 border-emerald-800/80 pt-5 flex justify-between font-medium">
+          <span id="auth-status-display">status: authenticated</span>
+          <span id="pending-count">0 pending tasks</span>
+        </footer>
       </div>
 
-      <!-- Section: Now -->
-      <section>
-        <h2 class="text-base text-emerald-300 font-bold tracking-wider mb-3 glow-text">// now</h2>
-        <div id="list-now" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
-      </section>
-
-      <!-- Section: Later -->
-      <section>
-        <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
-          <h2 class="text-base text-emerald-300 font-bold tracking-wider glow-text">// later</h2>
-          <button id="btn-toggle-later" onclick="toggleLater()" class="text-sm text-emerald-400 hover:text-emerald-200 font-semibold">[-] minimize</button>
+      <!-- ================= VIEW 2: HEALTH & DAILY HABITS ================= -->
+      <div id="view-health" class="app-view hidden space-y-6">
+        <div class="space-y-3">
+          <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// daily_health_routines</h2>
+          <p class="text-sm text-emerald-400/80">Stay on track with physical and mental health habits. Resets daily.</p>
+          
+          <div class="flex items-center gap-3 bg-black border-2 border-emerald-600 rounded-md px-4 py-3 focus-within:border-emerald-400 glow-box">
+            <span class="text-base text-emerald-300 font-bold glow-text">></span>
+            <input
+              id="habit-input"
+              type="text"
+              placeholder="add new daily habit (e.g., drink 3L water, 15 min stretch)..."
+              class="w-full bg-transparent text-sm sm:text-base text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
+              onkeydown="if(event.key === 'Enter') addHabit()"
+            />
+            <select id="habit-category" class="bg-black border border-emerald-600 text-emerald-300 text-xs sm:text-sm rounded px-2 py-1 focus:outline-none">
+              <option value="physical">physical</option>
+              <option value="mental">mental</option>
+            </select>
+          </div>
         </div>
-        <div id="list-later" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
-      </section>
 
-      <!-- Section: Completed -->
-      <section>
-        <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
-          <h2 class="text-base text-emerald-400 font-bold tracking-wider">// completed</h2>
-          <button id="btn-toggle-completed" onclick="toggleCompleted()" class="text-sm text-emerald-400 hover:text-emerald-200 font-semibold">[-] minimize</button>
+        <!-- Physical Health Section -->
+        <section class="space-y-3">
+          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// physical health</h3>
+          <div id="list-habits-physical" class="space-y-2.5 min-h-[40px]"></div>
+        </section>
+
+        <!-- Mental Health Section -->
+        <section class="space-y-3 pt-4 border-t border-emerald-800/80">
+          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// mental health</h3>
+          <div id="list-habits-mental" class="space-y-2.5 min-h-[40px]"></div>
+        </section>
+      </div>
+
+      <!-- ================= VIEW 3: BUDGET TRACKER ================= -->
+      <div id="view-budget" class="app-view hidden space-y-6">
+        <div class="space-y-3">
+          <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// budget_and_spending</h2>
+          <p class="text-sm text-emerald-400/80">Log purchases, view monthly projections, and track category spending.</p>
+          
+          <!-- Expense Input Form -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
+            <div class="sm:col-span-3">
+              <label class="text-xs text-emerald-400 block mb-1">amount ($)</label>
+              <input id="expense-amount" type="number" step="0.01" placeholder="0.00" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" />
+            </div>
+            <div class="sm:col-span-4">
+              <label class="text-xs text-emerald-400 block mb-1">category</label>
+              <select id="expense-category" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400">
+                <option value="food">food & dining</option>
+                <option value="groceries">groceries</option>
+                <option value="transport">transport / gas</option>
+                <option value="gear">gear & tech</option>
+                <option value="bills">bills & subs</option>
+                <option value="misc">misc / other</option>
+              </select>
+            </div>
+            <div class="sm:col-span-5">
+              <label class="text-xs text-emerald-400 block mb-1">note / description</label>
+              <div class="flex gap-2">
+                <input id="expense-note" type="text" placeholder="what was this for?" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" onkeydown="if(event.key === 'Enter') addExpense()" />
+                <button onclick="addExpense()" class="bg-emerald-950 text-emerald-200 border border-emerald-500 px-4 rounded font-bold hover:bg-emerald-900 glow-text">[add]</button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="list-completed" class="space-y-2.5 min-h-[48px]"></div>
-      </section>
 
-      <!-- Footer -->
-      <footer class="mt-12 text-sm text-emerald-400/90 border-t-2 border-emerald-800/80 pt-5 flex justify-between font-medium">
-        <span id="auth-status-display">status: authenticated</span>
-        <span id="pending-count">0 pending tasks</span>
-      </footer>
+        <!-- Analytics Dashboard Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+            <span class="text-xs text-emerald-400 font-bold">// month-to-date total</span>
+            <div id="stat-mtd" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+          </div>
+          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+            <span class="text-xs text-emerald-400 font-bold">// daily average</span>
+            <div id="stat-daily-avg" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00 / day</div>
+          </div>
+          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+            <span class="text-xs text-emerald-400 font-bold">// estimated monthly spend</span>
+            <div id="stat-projection" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+          </div>
+        </div>
+
+        <!-- Category Breakdown -->
+        <section class="space-y-3 pt-2">
+          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// spending by category (this month)</h3>
+          <div id="category-breakdown" class="space-y-2"></div>
+        </section>
+
+        <!-- Recent Expenses Log -->
+        <section class="space-y-3 pt-4 border-t border-emerald-800/80">
+          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// recent transactions</h3>
+          <div id="list-expenses" class="space-y-2 max-h-60 overflow-y-auto"></div>
+        </section>
+      </div>
+
     </div>
-
   </div>
 
   <script>
@@ -154,12 +262,18 @@
     const db = firebase.firestore();
 
     let currentUser = null;
-    let unsubscribeSync = null;
+    let currentTab = 'tasks';
+    let unsubTasks = null;
+    let unsubHabits = null;
+    let unsubExpenses = null;
+
     let targetList = 'now';
     let laterMinimized = false;
     let completedMinimized = false;
     let draggedId = null;
     let todos = [];
+    let habits = [];
+    let expenses = [];
     let collapsedSublists = {};
     let activeSubtaskInputId = null;
 
@@ -191,7 +305,9 @@
         document.getElementById('auth-status-display').innerText = `status: authenticated`;
         initSync();
       } else {
-        if (unsubscribeSync) unsubscribeSync();
+        if (unsubTasks) unsubTasks();
+        if (unsubHabits) unsubHabits();
+        if (unsubExpenses) unsubExpenses();
         document.getElementById('app-screen').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
       }
@@ -202,7 +318,6 @@
       const pass = document.getElementById('auth-pass').value;
       const msg = document.getElementById('auth-msg');
       msg.innerText = '';
-      
       try {
         await auth.signInWithEmailAndPassword(email, pass);
       } catch (err) {
@@ -215,12 +330,9 @@
       const pass = document.getElementById('auth-pass').value;
       const msg = document.getElementById('auth-msg');
       msg.innerText = '';
-
       try {
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-        await db.collection('users').doc(userCred.user.uid).set({
-          email: email
-        }, { merge: true });
+        await db.collection('users').doc(userCred.user.uid).set({ email: email }, { merge: true });
       } catch (err) {
         msg.innerText = `[error]: ${err.message.toLowerCase()}`;
       }
@@ -243,63 +355,76 @@
         const userDoc = await db.collection('users').doc(sharedUid).get();
         if (userDoc.exists && userDoc.data().email) {
           document.getElementById('user-display').innerText = `user: viewing ${userDoc.data().email}'s list`;
-        } else {
-          document.getElementById('user-display').innerText = `user: viewing shared list (${sharedUid.substring(0, 6)}...)`;
         }
       } catch (err) {
         console.error("Could not fetch owner email:", err);
       }
     }
 
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      ['tasks', 'health', 'budget'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (btn) {
+          btn.className = t === tab ? 'text-emerald-200 font-bold underline glow-text whitespace-nowrap' : 'text-emerald-400 hover:text-emerald-100 font-semibold whitespace-nowrap';
+        }
+      });
+      render();
+    }
+
     function initSync() {
       const sharedUid = getSharedUserId();
       const targetUid = sharedUid || (currentUser ? currentUser.uid : null);
-
       if (!targetUid) return;
 
-      if (sharedUid) {
-        fetchOwnerEmail(sharedUid);
-      }
+      if (sharedUid) fetchOwnerEmail(sharedUid);
+      updateSyncStatus('connecting...');
 
-      updateSyncStatus(sharedUid ? 'loading shared tasks...' : 'connecting...');
+      if (unsubTasks) unsubTasks();
+      if (unsubHabits) unsubHabits();
+      if (unsubExpenses) unsubExpenses();
 
-      if (unsubscribeSync) unsubscribeSync();
+      // Sync Tasks
+      unsubTasks = db.collection('users').doc(targetUid).collection('tasks').onSnapshot((snapshot) => {
+        todos = snapshot.docs.map(doc => ({
+          id: doc.id,
+          subtasks: [],
+          order: doc.data().order ?? new Date(doc.data().createdAt || 0).getTime(),
+          ...doc.data()
+        }));
+        todos.sort((a, b) => a.order - b.order);
+        updateSyncStatus(sharedUid ? 'read-only mode' : 'synced');
+        render();
+      }, (err) => { console.error(err); updateSyncStatus('access error'); });
 
-      unsubscribeSync = db.collection('users').doc(targetUid).collection('tasks')
-        .onSnapshot((snapshot) => {
-          todos = snapshot.docs.map(doc => ({
-            id: doc.id,
-            subtasks: [],
-            order: doc.data().order ?? new Date(doc.data().createdAt || 0).getTime(),
-            ...doc.data()
-          }));
+      // Sync Habits
+      unsubHabits = db.collection('users').doc(targetUid).collection('habits').onSnapshot((snapshot) => {
+        habits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        render();
+      });
 
-          todos.sort((a, b) => a.order - b.order);
-          updateSyncStatus(sharedUid ? 'read-only mode' : 'synced');
-          render();
-        }, (error) => {
-          console.error(error);
-          updateSyncStatus('access error');
-        });
-    }
-
-    function formatDate(val) {
-      if (!val) return '';
-      let date = val.toDate ? val.toDate() : new Date(val);
-      if (isNaN(date.getTime())) return '';
-
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      return `${year}/${month}/${day} - ${hours}:${minutes}`;
+      // Sync Expenses
+      unsubExpenses = db.collection('users').doc(targetUid).collection('expenses').onSnapshot((snapshot) => {
+        expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        expenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        render();
+      });
     }
 
     function updateSyncStatus(msg) {
       document.getElementById('sync-status').innerText = msg;
     }
 
+    function formatDate(val) {
+      if (!val) return '';
+      let date = val.toDate ? val.toDate() : new Date(val);
+      if (isNaN(date.getTime())) return '';
+      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} - ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    // ================= TASK FUNCTIONS =================
     function setTarget(list) {
       if (getSharedUserId()) return;
       targetList = list;
@@ -310,7 +435,6 @@
 
     async function addTask() {
       if (getSharedUserId() || !currentUser) return;
-      
       const input = document.getElementById('task-input');
       const val = input.value.trim().toLowerCase();
       if (!val) return;
@@ -318,16 +442,9 @@
       const taskId = Date.now().toString();
       const now = Date.now();
       const newTask = {
-        text: val,
-        completed: false,
-        list: targetList,
-        previousList: targetList,
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        order: now,
-        subtasks: []
+        text: val, completed: false, list: targetList, previousList: targetList,
+        createdAt: new Date().toISOString(), completedAt: null, order: now, subtasks: []
       };
-
       input.value = '';
       updateSyncStatus('saving...');
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).set(newTask);
@@ -335,31 +452,17 @@
 
     async function toggleTask(id) {
       if (getSharedUserId() || !currentUser) return;
-
       const task = todos.find(t => t.id === id);
       if (!task) return;
-
       const isCompleting = !task.completed;
-      updateSyncStatus('updating...');
-
-      const updates = {
-        completed: isCompleting,
-        completedAt: isCompleting ? new Date().toISOString() : null
-      };
-
-      if (isCompleting) {
-        updates.previousList = task.list;
-      } else if (task.previousList) {
-        updates.list = task.previousList;
-      }
-
+      const updates = { completed: isCompleting, completedAt: isCompleting ? new Date().toISOString() : null };
+      if (isCompleting) updates.previousList = task.list;
+      else if (task.previousList) updates.list = task.previousList;
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).update(updates);
     }
 
     async function deleteTask(id) {
       if (getSharedUserId() || !currentUser) return;
-
-      updateSyncStatus('deleting...');
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(id).delete();
     }
 
@@ -371,28 +474,16 @@
 
     async function submitSubtask(taskId) {
       if (getSharedUserId() || !currentUser) return;
-      
       const input = document.getElementById(`subtask-input-${taskId}`);
       if (!input) return;
-
       const text = input.value.trim().toLowerCase();
       if (!text) return;
-
       const task = todos.find(t => t.id === taskId);
       if (!task) return;
-
-      const subtasks = task.subtasks || [];
-      const newSubtask = {
-        id: Date.now().toString(),
-        text: text,
-        completed: false
-      };
-
-      updateSyncStatus('adding subtask...');
+      const newSubtask = { id: Date.now().toString(), text: text, completed: false };
       await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
-        subtasks: [...subtasks, newSubtask]
+        subtasks: [...(task.subtasks || []), newSubtask]
       });
-
       activeSubtaskInputId = taskId;
     }
 
@@ -400,31 +491,16 @@
       if (getSharedUserId() || !currentUser) return;
       const task = todos.find(t => t.id === taskId);
       if (!task || !task.subtasks) return;
-
-      const updatedSubtasks = task.subtasks.map(s => {
-        if (s.id === subtaskId) {
-          return { ...s, completed: !s.completed };
-        }
-        return s;
-      });
-
-      updateSyncStatus('updating subtask...');
-      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
-        subtasks: updatedSubtasks
-      });
+      const updatedSubtasks = task.subtasks.map(s => s.id === subtaskId ? { ...s, completed: !s.completed } : s);
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ subtasks: updatedSubtasks });
     }
 
     async function deleteSubtask(taskId, subtaskId) {
       if (getSharedUserId() || !currentUser) return;
       const task = todos.find(t => t.id === taskId);
       if (!task || !task.subtasks) return;
-
       const updatedSubtasks = task.subtasks.filter(s => s.id !== subtaskId);
-
-      updateSyncStatus('deleting subtask...');
-      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({
-        subtasks: updatedSubtasks
-      });
+      await db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ subtasks: updatedSubtasks });
     }
 
     function toggleSublistCollapse(taskId) {
@@ -459,32 +535,20 @@
       if (getSharedUserId() || !currentUser || !draggedId || draggedId === targetTaskId) return;
       e.preventDefault();
       e.stopPropagation();
-
       const sourceTask = todos.find(t => t.id === draggedId);
       const targetTask = todos.find(t => t.id === targetTaskId);
       if (!sourceTask || !targetTask) return;
-
       const targetSection = targetTask.list;
       const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
       const targetIdx = sectionTasks.findIndex(t => t.id === targetTaskId);
-
       const rect = e.currentTarget.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const insertIdx = offset > rect.height / 2 ? targetIdx + 1 : targetIdx;
-
+      const insertIdx = (e.clientY - rect.top) > rect.height / 2 ? targetIdx + 1 : targetIdx;
       sectionTasks.splice(insertIdx, 0, sourceTask);
-
-      updateSyncStatus('reordering...');
       const batch = db.batch();
       sectionTasks.forEach((t, idx) => {
         const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
-        batch.update(ref, {
-          order: idx,
-          list: targetSection,
-          previousList: targetSection
-        });
+        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
       });
-
       draggedId = null;
       await batch.commit();
     }
@@ -492,29 +556,88 @@
     async function handleDrop(e, targetSection) {
       if (getSharedUserId() || !currentUser || !draggedId) return;
       e.preventDefault();
-
       const task = todos.find(t => t.id === draggedId);
       if (!task || task.completed) return;
-
       const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
       sectionTasks.push(task);
-
-      updateSyncStatus('updating...');
       const batch = db.batch();
       sectionTasks.forEach((t, idx) => {
         const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
-        batch.update(ref, {
-          order: idx,
-          list: targetSection,
-          previousList: targetSection
-        });
+        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
       });
-
       draggedId = null;
       await batch.commit();
     }
 
+    // ================= HEALTH HABIT FUNCTIONS =================
+    async function addHabit() {
+      if (getSharedUserId() || !currentUser) return;
+      const input = document.getElementById('habit-input');
+      const cat = document.getElementById('habit-category').value;
+      const val = input.value.trim().toLowerCase();
+      if (!val) return;
+
+      const habitId = Date.now().toString();
+      const newHabit = { text: val, category: cat, completedDates: [], createdAt: new Date().toISOString() };
+      input.value = '';
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).set(newHabit);
+    }
+
+    async function toggleHabitToday(habitId) {
+      if (getSharedUserId() || !currentUser) return;
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit) return;
+      const today = new Date().toISOString().split('T')[0];
+      let dates = habit.completedDates || [];
+      if (dates.includes(today)) {
+        dates = dates.filter(d => d !== today);
+      } else {
+        dates.push(today);
+      }
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ completedDates: dates });
+    }
+
+    async function deleteHabit(habitId) {
+      if (getSharedUserId() || !currentUser) return;
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).delete();
+    }
+
+    // ================= BUDGET FUNCTIONS =================
+    async function addExpense() {
+      if (getSharedUserId() || !currentUser) return;
+      const amountInput = document.getElementById('expense-amount');
+      const catInput = document.getElementById('expense-category');
+      const noteInput = document.getElementById('expense-note');
+
+      const amount = parseFloat(amountInput.value);
+      if (isNaN(amount) || amount <= 0) return;
+
+      const expenseId = Date.now().toString();
+      const newExpense = {
+        amount: amount,
+        category: catInput.value,
+        note: noteInput.value.trim().toLowerCase() || 'expense',
+        createdAt: new Date().toISOString()
+      };
+
+      amountInput.value = '';
+      noteInput.value = '';
+      await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).set(newExpense);
+    }
+
+    async function deleteExpense(expenseId) {
+      if (getSharedUserId() || !currentUser) return;
+      await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).delete();
+    }
+
+    // ================= RENDER ENGINE =================
     function render() {
+      if (currentTab === 'tasks') renderTasks();
+      if (currentTab === 'health') renderHealth();
+      if (currentTab === 'budget') renderBudget();
+    }
+
+    function renderTasks() {
       const nowContainer = document.getElementById('list-now');
       const laterContainer = document.getElementById('list-later');
       const completedContainer = document.getElementById('list-completed');
@@ -528,27 +651,16 @@
       const laterItems = activeTodos.filter(t => t.list === 'later');
       const completedItems = todos.filter(t => t.completed);
 
-      if (nowItems.length === 0) {
-        nowContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      } else {
-        nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
-      }
+      if (nowItems.length === 0) nowContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
 
-      if (laterMinimized) {
-        laterContainer.innerHTML = '';
-      } else if (laterItems.length === 0) {
-        laterContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      } else {
-        laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
-      }
+      if (laterMinimized) laterContainer.innerHTML = '';
+      else if (laterItems.length === 0) laterContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
 
-      if (completedMinimized) {
-        completedContainer.innerHTML = '';
-      } else if (completedItems.length === 0) {
-        completedContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      } else {
-        completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
-      }
+      if (completedMinimized) completedContainer.innerHTML = '';
+      else if (completedItems.length === 0) completedContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
 
       document.getElementById('pending-count').innerText = `${activeTodos.length} pending tasks`;
     }
@@ -581,24 +693,10 @@
             ${subtasks.map(s => `
               <div class="flex items-center justify-between text-sm group/sub font-medium">
                 <div class="flex items-center gap-2">
-                  ${
-                    isReadOnly
-                      ? `<span class="text-emerald-500">${s.completed ? '[x]' : '[ ]'}</span>`
-                      : `<button onclick="toggleSubtask('${todo.id}', '${s.id}')" class="text-emerald-300 hover:text-emerald-100">
-                          ${s.completed ? '[x]' : '[ ]'}
-                         </button>`
-                  }
-                  <span class="${s.completed ? 'line-through text-emerald-600' : 'text-emerald-200'}">
-                    ${s.text}
-                  </span>
+                  ${isReadOnly ? `<span class="text-emerald-500">${s.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleSubtask('${todo.id}', '${s.id}')" class="text-emerald-300 hover:text-emerald-100">${s.completed ? '[x]' : '[ ]'}</button>`}
+                  <span class="${s.completed ? 'line-through text-emerald-600' : 'text-emerald-200'}">${s.text}</span>
                 </div>
-                ${
-                  !isReadOnly
-                    ? `<button onclick="deleteSubtask('${todo.id}', '${s.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                        [del]
-                       </button>`
-                    : ''
-                }
+                ${!isReadOnly ? `<button onclick="deleteSubtask('${todo.id}', '${s.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover/sub:opacity-100 transition-opacity">[del]</button>` : ''}
               </div>
             `).join('')}
           </div>
@@ -611,13 +709,7 @@
           <div class="mt-3 pl-8 border-l-2 border-emerald-600">
             <div class="flex items-center gap-2 bg-black border border-emerald-600 rounded px-2.5 py-1.5">
               <span class="text-xs text-emerald-400 font-bold">></span>
-              <input
-                id="subtask-input-${todo.id}"
-                type="text"
-                placeholder="add subtask... (press enter)"
-                class="w-full bg-transparent text-xs text-emerald-100 placeholder-emerald-700 focus:outline-none"
-                onkeydown="if(event.key === 'Enter') submitSubtask('${todo.id}'); if(event.key === 'Escape') toggleSubtaskInput('${todo.id}');"
-              />
+              <input id="subtask-input-${todo.id}" type="text" placeholder="add subtask... (press enter)" class="w-full bg-transparent text-xs text-emerald-100 placeholder-emerald-700 focus:outline-none" onkeydown="if(event.key === 'Enter') submitSubtask('${todo.id}'); if(event.key === 'Escape') toggleSubtaskInput('${todo.id}');" />
               <button onclick="submitSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold px-1">[add]</button>
               <button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-600 hover:text-emerald-400 font-bold px-1">[x]</button>
             </div>
@@ -629,43 +721,18 @@
         <div class="flex items-center justify-between min-w-0">
           <div class="flex items-center gap-4 min-w-0">
             <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
-            ${
-              isReadOnly
-                ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>`
-                : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">
-                    ${todo.completed ? '[x]' : '[ ]'}
-                   </button>`
-            }
-            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">
-              ${todo.text}
-            </span>
+            ${isReadOnly ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">${todo.completed ? '[x]' : '[ ]'}</button>`}
+            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">${todo.text}</span>
           </div>
           <div class="flex items-center gap-3">
-            ${
-              subtasks.length > 0
-                ? `<button onclick="toggleSublistCollapse('${todo.id}')" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold">
-                    ${isCollapsed ? `[+] ${subtasks.length} subtasks` : '[-] minimize'}
-                   </button>`
-                : ''
-            }
-            ${
-              !isReadOnly
-                ? `<button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                    + subtask
-                   </button>
-                   <button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">
-                    [del]
-                   </button>`
-                : ''
-            }
+            ${subtasks.length > 0 ? `<button onclick="toggleSublistCollapse('${todo.id}')" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold">${isCollapsed ? `[+] ${subtasks.length} subtasks` : '[-] minimize'}</button>` : ''}
+            ${!isReadOnly ? `<button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">+ subtask</button><button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">[del]</button>` : ''}
           </div>
         </div>
-        
         <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
           ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
           ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
         </div>
-
         ${subtasksHtml}
         ${inlineInputHtml}
       `;
@@ -676,8 +743,119 @@
           if (el) el.focus();
         }, 50);
       }
-
       return div;
+    }
+
+    function renderHealth() {
+      const physicalContainer = document.getElementById('list-habits-physical');
+      const mentalContainer = document.getElementById('list-habits-mental');
+      physicalContainer.innerHTML = '';
+      mentalContainer.innerHTML = '';
+
+      const today = new Date().toISOString().split('T')[0];
+      const physicalHabits = habits.filter(h => h.category === 'physical');
+      const mentalHabits = habits.filter(h => h.category === 'mental');
+
+      if (physicalHabits.length === 0) physicalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no physical habits set</p>';
+      else physicalHabits.forEach(h => physicalContainer.appendChild(createHabitElement(h, today)));
+
+      if (mentalHabits.length === 0) mentalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no mental habits set</p>';
+      else mentalHabits.forEach(h => mentalContainer.appendChild(createHabitElement(h, today)));
+    }
+
+    function createHabitElement(habit, today) {
+      const div = document.createElement('div');
+      const isCompletedToday = (habit.completedDates || []).includes(today);
+      const isReadOnly = Boolean(getSharedUserId());
+
+      div.className = `group flex items-center justify-between p-3 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box`;
+      div.innerHTML = `
+        <div class="flex items-center gap-3">
+          ${isReadOnly ? `<span class="text-emerald-500 font-bold">${isCompletedToday ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleHabitToday('${habit.id}')" class="text-emerald-200 font-bold hover:text-emerald-100 glow-text">${isCompletedToday ? '[x]' : '[ ]'}</button>`}
+          <span class="text-sm sm:text-base font-medium ${isCompletedToday ? 'line-through text-emerald-600' : 'text-emerald-100 glow-text'}">${habit.text}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-emerald-400/90 font-medium">streak: ${(habit.completedDates || []).length} days</span>
+          ${!isReadOnly ? `<button onclick="deleteHabit('${habit.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">[del]</button>` : ''}
+        </div>
+      `;
+      return div;
+    }
+
+    function renderBudget() {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const currentDay = now.getDate();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Filter current month expenses
+      const monthExpenses = expenses.filter(e => {
+        const d = new Date(e.createdAt);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      });
+
+      const mtdTotal = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const dailyAvg = currentDay > 0 ? mtdTotal / currentDay : 0;
+      const projection = dailyAvg * daysInMonth;
+
+      document.getElementById('stat-mtd').innerText = `$${mtdTotal.toFixed(2)}`;
+      document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
+      document.getElementById('stat-projection').innerText = `$${projection.toFixed(2)}`;
+
+      // Category breakdown calculation
+      const catTotals = {};
+      monthExpenses.forEach(e => {
+        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+      });
+
+      const breakdownContainer = document.getElementById('category-breakdown');
+      breakdownContainer.innerHTML = '';
+      const categories = ['food', 'groceries', 'transport', 'gear', 'bills', 'misc'];
+
+      categories.forEach(cat => {
+        const total = catTotals[cat] || 0;
+        const pct = mtdTotal > 0 ? (total / mtdTotal) * 100 : 0;
+        const row = document.createElement('div');
+        row.className = 'space-y-1';
+        row.innerHTML = `
+          <div class="flex justify-between text-xs sm:text-sm font-medium">
+            <span class="text-emerald-300">// ${cat}</span>
+            <span class="text-emerald-100 glow-text">$${total.toFixed(2)} (${pct.toFixed(0)}%)</span>
+          </div>
+          <div class="w-full bg-emerald-950/60 border border-emerald-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-emerald-400 h-full transition-all duration-300" style="width: ${pct}%"></div>
+          </div>
+        `;
+        breakdownContainer.appendChild(row);
+      });
+
+      // Recent transactions list
+      const listExpenses = document.getElementById('list-expenses');
+      listExpenses.innerHTML = '';
+      if (expenses.length === 0) {
+        listExpenses.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no expenses logged</p>';
+      } else {
+        expenses.forEach(e => {
+          const item = document.createElement('div');
+          item.className = 'flex items-center justify-between p-3 rounded-md border border-emerald-800/80 bg-emerald-950/20 text-sm';
+          item.innerHTML = `
+            <div class="flex items-center gap-3">
+              <span class="text-emerald-400 font-bold">$${e.amount.toFixed(2)}</span>
+              <span class="text-emerald-200">[${e.category}] ${e.note}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-emerald-400/70">${formatDate(e.createdAt)}</span>
+              ${!getBooleanReadOnly() ? `<button onclick="deleteExpense('${e.id}')" class="text-emerald-400 hover:text-rose-400 text-xs">[del]</button>` : ''}
+            </div>
+          `;
+          listExpenses.appendChild(item);
+        });
+      }
+    }
+
+    function getBooleanReadOnly() {
+      return Boolean(getSharedUserId());
     }
   </script>
 </body>

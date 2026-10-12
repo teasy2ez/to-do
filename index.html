@@ -61,7 +61,10 @@
         </div>
         
         <div class="space-y-2">
-          <label class="text-base font-semibold text-emerald-300 glow-text">password:</label>
+          <div class="flex justify-between items-center">
+            <label class="text-base font-semibold text-emerald-300 glow-text">password:</label>
+            <button onclick="resetPassword()" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold underline">[forgot password?]</button>
+          </div>
           <input id="auth-pass" type="password" placeholder="••••••••" class="w-full bg-black border-2 border-emerald-600 rounded-md px-4 py-3 text-base text-emerald-100 placeholder-emerald-700 focus:outline-none focus:border-emerald-400 glow-box"/>
         </div>
 
@@ -153,7 +156,6 @@
             <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// daily_health_routines</h2>
             <p class="text-xs text-emerald-400/80">Physical & mental routines. Resets daily.</p>
           </div>
-          <!-- Daily Perfect Streak Banner -->
           <div class="bg-emerald-950/60 border border-emerald-600 px-3 py-1.5 rounded text-right glow-box">
             <span class="text-xs text-emerald-400 uppercase font-bold block">perfect spree</span>
             <span id="perfect-spree-counter" class="text-sm font-bold text-emerald-200 glow-text">0 DAYS 🔥</span>
@@ -327,7 +329,7 @@
     let expenses = [];
     let categories = ['food', 'groceries', 'transport', 'gear', 'bills', 'misc'];
     let monthStartDay = 1;
-    let budgetHorizon = 'month'; // 'month' or 'week'
+    let budgetHorizon = 'month';
 
     let collapsedSublists = {};
     let activeSubtaskInputId = null;
@@ -394,6 +396,24 @@
       }
     }
 
+    async function resetPassword() {
+      const email = document.getElementById('auth-email').value.trim();
+      const msg = document.getElementById('auth-msg');
+      msg.innerText = '';
+
+      if (!email) {
+        msg.innerText = `[error]: please enter your email address first`;
+        return;
+      }
+
+      try {
+        await auth.sendPasswordResetEmail(email);
+        msg.innerText = `[info]: password reset email sent to ${email}`;
+      } catch (err) {
+        msg.innerText = `[error]: ${err.message.toLowerCase()}`;
+      }
+    }
+
     function logout() {
       auth.signOut();
     }
@@ -443,7 +463,6 @@
       if (unsubExpenses) unsubExpenses();
       if (unsubUserConfig) unsubUserConfig();
 
-      // Sync User Settings
       unsubUserConfig = db.collection('users').doc(targetUid).onSnapshot(doc => {
         if (doc.exists && doc.data()) {
           const data = doc.data();
@@ -457,7 +476,6 @@
         renderBudget();
       });
 
-      // Sync Tasks
       unsubTasks = db.collection('users').doc(targetUid).collection('tasks').onSnapshot((snapshot) => {
         todos = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -470,13 +488,11 @@
         render();
       }, (err) => { console.error(err); updateSyncStatus('access error'); });
 
-      // Sync Habits
       unsubHabits = db.collection('users').doc(targetUid).collection('habits').onSnapshot((snapshot) => {
         habits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         render();
       });
 
-      // Sync Expenses
       unsubExpenses = db.collection('users').doc(targetUid).collection('expenses').onSnapshot((snapshot) => {
         expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         expenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -655,7 +671,7 @@
         text: val,
         category: cat,
         targetCount: targetCount,
-        dailyLogs: {}, // e.g., { "2026-10-12": 3 }
+        dailyLogs: {},
         createdAt: new Date().toISOString()
       };
       input.value = '';
@@ -672,12 +688,11 @@
       const logs = habit.dailyLogs || {};
       const currentDone = logs[today] || 0;
 
-      // Toggle logic for slot click
       let newDone = currentDone;
       if (slotIndex < currentDone) {
-        newDone = slotIndex; // Uncheck down to here
+        newDone = slotIndex;
       } else {
-        newDone = slotIndex + 1; // Check up to here
+        newDone = slotIndex + 1;
       }
 
       logs[today] = newDone;
@@ -689,7 +704,6 @@
       await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).delete();
     }
 
-    // Calculate Consecutive Spree Days
     function calculateSpree() {
       if (habits.length === 0) return 0;
       let spree = 0;
@@ -707,7 +721,6 @@
           spree++;
           checkDate.setDate(checkDate.getDate() - 1);
         } else {
-          // If checking today and incomplete, check if yesterday was complete
           if (spree === 0 && dateStr === new Date().toISOString().split('T')[0]) {
             checkDate.setDate(checkDate.getDate() - 1);
             const yesterdayStr = checkDate.toISOString().split('T')[0];
@@ -717,8 +730,7 @@
               return done >= target;
             });
             if (yesterdayComplete) {
-              // Spree continues from yesterday
-              spree = 0; // We keep searching back
+              spree = 0;
               continue;
             }
           }
@@ -812,12 +824,11 @@
       await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).delete();
     }
 
-    // Calculate start date of current budget cycle
     function getBudgetPeriodRange() {
       const now = new Date();
       if (budgetHorizon === 'week') {
         const start = new Date(now);
-        const day = start.getDay(); // 0 (Sun) to 6 (Sat)
+        const day = start.getDay();
         start.setDate(start.getDate() - day);
         start.setHours(0,0,0,0);
 
@@ -828,7 +839,6 @@
         const daysPassed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
         return { start, end, daysPassed, totalDays: 7 };
       } else {
-        // Month Cycle based on monthStartDay
         let start = new Date(now.getFullYear(), now.getMonth(), monthStartDay, 0, 0, 0);
         if (now.getDate() < monthStartDay) {
           start = new Date(now.getFullYear(), now.getMonth() - 1, monthStartDay, 0, 0, 0);
@@ -976,7 +986,6 @@
       if (mentalHabits.length === 0) mentalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no mental habits set</p>';
       else mentalHabits.forEach(h => mentalContainer.appendChild(createHabitElement(h, today)));
 
-      // Render Spree Counter
       const spree = calculateSpree();
       document.getElementById('perfect-spree-counter').innerText = `${spree} DAYS 🔥`;
     }
@@ -1015,7 +1024,6 @@
     function renderBudget() {
       const { start, end, daysPassed, totalDays } = getBudgetPeriodRange();
 
-      // Filter period expenses
       const periodExpenses = expenses.filter(e => {
         const d = new Date(e.createdAt);
         return d >= start && d <= end;
@@ -1032,7 +1040,6 @@
       document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
       document.getElementById('stat-projection').innerText = `$${projection.toFixed(2)}`;
 
-      // Category breakdown calculation
       const catTotals = {};
       periodExpenses.forEach(e => {
         catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
@@ -1058,7 +1065,6 @@
         breakdownContainer.appendChild(row);
       });
 
-      // Recent transactions list
       const listExpenses = document.getElementById('list-expenses');
       listExpenses.innerHTML = '';
       if (expenses.length === 0) {

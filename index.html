@@ -119,13 +119,11 @@
           </div>
         </div>
 
-        <!-- Section: Now -->
         <section>
           <h2 class="text-base text-emerald-300 font-bold tracking-wider mb-3 glow-text">// now</h2>
           <div id="list-now" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'now')"></div>
         </section>
 
-        <!-- Section: Later -->
         <section>
           <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
             <h2 class="text-base text-emerald-300 font-bold tracking-wider glow-text">// later</h2>
@@ -134,7 +132,6 @@
           <div id="list-later" class="space-y-2.5 min-h-[48px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'later')"></div>
         </section>
 
-        <!-- Section: Completed -->
         <section>
           <div class="flex items-center justify-between mb-3 border-t-2 border-emerald-800/80 pt-6">
             <h2 class="text-base text-emerald-400 font-bold tracking-wider">// completed</h2>
@@ -162,7 +159,6 @@
           </div>
         </div>
 
-        <!-- Habit Input Form -->
         <div class="space-y-2 bg-black border-2 border-emerald-600 rounded-md p-3.5 glow-box">
           <div class="flex items-center gap-3">
             <span class="text-base text-emerald-300 font-bold glow-text">></span>
@@ -189,13 +185,11 @@
           </div>
         </div>
 
-        <!-- Physical Health Section -->
         <section class="space-y-3">
           <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// physical health</h3>
           <div id="list-habits-physical" class="space-y-2.5 min-h-[40px]"></div>
         </section>
 
-        <!-- Mental Health Section -->
         <section class="space-y-3 pt-4 border-t border-emerald-800/80">
           <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// mental health</h3>
           <div id="list-habits-mental" class="space-y-2.5 min-h-[40px]"></div>
@@ -212,7 +206,6 @@
           <button onclick="toggleBudgetSettings()" class="text-xs text-emerald-300 border border-emerald-600 px-3 py-1 rounded hover:bg-emerald-950 font-bold glow-text">[⚙ settings]</button>
         </div>
 
-        <!-- Budget Settings Drawer -->
         <div id="budget-settings-drawer" class="hidden bg-emerald-950/40 border-2 border-emerald-600 p-4 rounded-md space-y-4 glow-box">
           <h3 class="text-xs font-bold text-emerald-300 uppercase tracking-wider">// budget settings & config</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -237,7 +230,6 @@
           </div>
         </div>
 
-        <!-- Expense Input Form -->
         <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
           <div class="sm:col-span-3">
             <label class="text-xs text-emerald-400 block mb-1">amount ($)</label>
@@ -256,7 +248,6 @@
           </div>
         </div>
 
-        <!-- Analytics Controls & Dashboard -->
         <div class="space-y-3">
           <div class="flex justify-between items-center text-xs">
             <span class="text-emerald-400 font-bold">// forecast horizon:</span>
@@ -282,13 +273,11 @@
           </div>
         </div>
 
-        <!-- Category Breakdown -->
         <section class="space-y-3 pt-2">
           <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// spending by category (current period)</h3>
           <div id="category-breakdown" class="space-y-2"></div>
         </section>
 
-        <!-- Recent Expenses Log -->
         <section class="space-y-3 pt-4 border-t border-emerald-800/80">
           <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// recent transactions</h3>
           <div id="list-expenses" class="space-y-2 max-h-60 overflow-y-auto"></div>
@@ -390,7 +379,7 @@
       msg.innerText = '';
       try {
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-        await db.collection('users').doc(userCred.user.uid).set({ email: email }, { merge: true });
+        await db.collection('users').doc(userCred.user.uid).set({ email: email, categories: categories, monthStartDay: 1 }, { merge: true });
       } catch (err) {
         msg.innerText = `[error]: ${err.message.toLowerCase()}`;
       }
@@ -466,7 +455,7 @@
       unsubUserConfig = db.collection('users').doc(targetUid).onSnapshot(doc => {
         if (doc.exists && doc.data()) {
           const data = doc.data();
-          if (data.categories) categories = data.categories;
+          if (data.categories && Array.isArray(data.categories)) categories = data.categories;
           if (data.monthStartDay) {
             monthStartDay = data.monthStartDay;
             document.getElementById('config-start-day').value = monthStartDay;
@@ -676,7 +665,9 @@
       };
       input.value = '';
       countInput.value = '1';
+      updateSyncStatus('saving habit...');
       await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).set(newHabit);
+      updateSyncStatus('synced');
     }
 
     async function updateHabitSlot(habitId, targetCount, slotIndex) {
@@ -685,7 +676,7 @@
       if (!habit) return;
 
       const today = new Date().toISOString().split('T')[0];
-      const logs = habit.dailyLogs || {};
+      const logs = Object.assign({}, habit.dailyLogs || {});
       const currentDone = logs[today] || 0;
 
       let newDone = currentDone;
@@ -760,20 +751,24 @@
       const val = input.value.trim().toLowerCase();
       if (!val || categories.includes(val)) return;
 
-      categories.push(val);
+      const updatedCategories = [...categories, val];
       input.value = '';
-      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+      updateSyncStatus('saving category...');
+      await db.collection('users').doc(currentUser.uid).set({ categories: updatedCategories }, { merge: true });
+      updateSyncStatus('synced');
     }
 
     async function removeCategory(catName) {
       if (getSharedUserId() || !currentUser) return;
-      categories = categories.filter(c => c !== catName);
-      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+      const updatedCategories = categories.filter(c => c !== catName);
+      await db.collection('users').doc(currentUser.uid).set({ categories: updatedCategories }, { merge: true });
     }
 
     function updateCategorySelects() {
       const select = document.getElementById('expense-category');
       const chips = document.getElementById('category-chips');
+      if (!select || !chips) return;
+      
       select.innerHTML = '';
       chips.innerHTML = '';
 
@@ -806,17 +801,20 @@
       const amount = parseFloat(amountInput.value);
       if (isNaN(amount) || amount <= 0) return;
 
+      const selectedCategory = catInput.value || (categories.length > 0 ? categories[0] : 'misc');
       const expenseId = Date.now().toString();
       const newExpense = {
         amount: amount,
-        category: catInput.value,
+        category: selectedCategory,
         note: noteInput.value.trim().toLowerCase() || 'expense',
         createdAt: new Date().toISOString()
       };
 
       amountInput.value = '';
       noteInput.value = '';
+      updateSyncStatus('saving expense...');
       await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).set(newExpense);
+      updateSyncStatus('synced');
     }
 
     async function deleteExpense(expenseId) {

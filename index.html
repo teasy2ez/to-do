@@ -99,7 +99,6 @@
 
       <!-- ================= VIEW 1: TASKS ================= -->
       <div id="view-tasks" class="app-view space-y-8">
-        <!-- Input Area -->
         <div id="input-container" class="space-y-3">
           <div class="flex gap-6 text-base mb-2">
             <button id="btn-now" onclick="setTarget('now')" class="text-emerald-200 font-bold underline glow-text">+ add to now</button>
@@ -149,23 +148,42 @@
 
       <!-- ================= VIEW 2: HEALTH & DAILY HABITS ================= -->
       <div id="view-health" class="app-view hidden space-y-6">
-        <div class="space-y-3">
-          <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// daily_health_routines</h2>
-          <p class="text-sm text-emerald-400/80">Stay on track with physical and mental health habits. Resets daily.</p>
-          
-          <div class="flex items-center gap-3 bg-black border-2 border-emerald-600 rounded-md px-4 py-3 focus-within:border-emerald-400 glow-box">
+        <div class="flex justify-between items-center border-b border-emerald-900/80 pb-3">
+          <div>
+            <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// daily_health_routines</h2>
+            <p class="text-xs text-emerald-400/80">Physical & mental routines. Resets daily.</p>
+          </div>
+          <!-- Daily Perfect Streak Banner -->
+          <div class="bg-emerald-950/60 border border-emerald-600 px-3 py-1.5 rounded text-right glow-box">
+            <span class="text-xs text-emerald-400 uppercase font-bold block">perfect spree</span>
+            <span id="perfect-spree-counter" class="text-sm font-bold text-emerald-200 glow-text">0 DAYS 🔥</span>
+          </div>
+        </div>
+
+        <!-- Habit Input Form -->
+        <div class="space-y-2 bg-black border-2 border-emerald-600 rounded-md p-3.5 glow-box">
+          <div class="flex items-center gap-3">
             <span class="text-base text-emerald-300 font-bold glow-text">></span>
             <input
               id="habit-input"
               type="text"
-              placeholder="add new daily habit (e.g., drink 3L water, 15 min stretch)..."
+              placeholder="add routine (e.g., 10 pushups, meditate)..."
               class="w-full bg-transparent text-sm sm:text-base text-emerald-100 placeholder-emerald-700 focus:outline-none font-medium"
               onkeydown="if(event.key === 'Enter') addHabit()"
             />
-            <select id="habit-category" class="bg-black border border-emerald-600 text-emerald-300 text-xs sm:text-sm rounded px-2 py-1 focus:outline-none">
-              <option value="physical">physical</option>
-              <option value="mental">mental</option>
-            </select>
+          </div>
+          <div class="flex items-center justify-between gap-3 pt-2 border-t border-emerald-900/60">
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-emerald-400">target per day:</label>
+              <input id="habit-count" type="number" min="1" max="10" value="1" class="w-12 bg-black border border-emerald-600 text-center text-xs text-emerald-200 rounded py-1 focus:outline-none"/>
+            </div>
+            <div class="flex items-center gap-3">
+              <select id="habit-category" class="bg-black border border-emerald-600 text-emerald-300 text-xs rounded px-2 py-1 focus:outline-none">
+                <option value="physical">physical</option>
+                <option value="mental">mental</option>
+              </select>
+              <button onclick="addHabit()" class="bg-emerald-950 text-emerald-200 border border-emerald-500 text-xs px-3 py-1 rounded font-bold hover:bg-emerald-900 glow-text">[add routine]</button>
+            </div>
           </div>
         </div>
 
@@ -184,56 +202,87 @@
 
       <!-- ================= VIEW 3: BUDGET TRACKER ================= -->
       <div id="view-budget" class="app-view hidden space-y-6">
-        <div class="space-y-3">
-          <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// budget_and_spending</h2>
-          <p class="text-sm text-emerald-400/80">Log purchases, view monthly projections, and track category spending.</p>
-          
-          <!-- Expense Input Form -->
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
-            <div class="sm:col-span-3">
-              <label class="text-xs text-emerald-400 block mb-1">amount ($)</label>
-              <input id="expense-amount" type="number" step="0.01" placeholder="0.00" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" />
-            </div>
-            <div class="sm:col-span-4">
-              <label class="text-xs text-emerald-400 block mb-1">category</label>
-              <select id="expense-category" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400">
-                <option value="food">food & dining</option>
-                <option value="groceries">groceries</option>
-                <option value="transport">transport / gas</option>
-                <option value="gear">gear & tech</option>
-                <option value="bills">bills & subs</option>
-                <option value="misc">misc / other</option>
-              </select>
-            </div>
-            <div class="sm:col-span-5">
-              <label class="text-xs text-emerald-400 block mb-1">note / description</label>
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="text-base text-emerald-300 font-bold tracking-wide glow-text">// budget_and_spending</h2>
+            <p class="text-xs text-emerald-400/80">Log purchases, view forecasts, and manage categories.</p>
+          </div>
+          <button onclick="toggleBudgetSettings()" class="text-xs text-emerald-300 border border-emerald-600 px-3 py-1 rounded hover:bg-emerald-950 font-bold glow-text">[⚙ settings]</button>
+        </div>
+
+        <!-- Budget Settings Drawer -->
+        <div id="budget-settings-drawer" class="hidden bg-emerald-950/40 border-2 border-emerald-600 p-4 rounded-md space-y-4 glow-box">
+          <h3 class="text-xs font-bold text-emerald-300 uppercase tracking-wider">// budget settings & config</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label class="text-emerald-400 block mb-1">month start day (1-28):</label>
               <div class="flex gap-2">
-                <input id="expense-note" type="text" placeholder="what was this for?" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" onkeydown="if(event.key === 'Enter') addExpense()" />
-                <button onclick="addExpense()" class="bg-emerald-950 text-emerald-200 border border-emerald-500 px-4 rounded font-bold hover:bg-emerald-900 glow-text">[add]</button>
+                <input id="config-start-day" type="number" min="1" max="28" value="1" class="w-16 bg-black border border-emerald-600 rounded px-2 py-1 text-emerald-100" />
+                <button onclick="saveBudgetConfig()" class="bg-emerald-900 border border-emerald-500 px-3 py-1 rounded text-emerald-200 font-bold">[save]</button>
               </div>
+            </div>
+            <div>
+              <label class="text-emerald-400 block mb-1">add custom category:</label>
+              <div class="flex gap-2">
+                <input id="new-cat-input" type="text" placeholder="e.g., gaming, travel" class="w-full bg-black border border-emerald-600 rounded px-2 py-1 text-emerald-100" />
+                <button onclick="addCustomCategory()" class="bg-emerald-900 border border-emerald-500 px-3 py-1 rounded text-emerald-200 font-bold">[add]</button>
+              </div>
+            </div>
+          </div>
+          <div class="pt-2">
+            <label class="text-emerald-400 text-xs block mb-1">current categories (click [x] to remove):</label>
+            <div id="category-chips" class="flex flex-wrap gap-2 pt-1"></div>
+          </div>
+        </div>
+
+        <!-- Expense Input Form -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
+          <div class="sm:col-span-3">
+            <label class="text-xs text-emerald-400 block mb-1">amount ($)</label>
+            <input id="expense-amount" type="number" step="0.01" placeholder="0.00" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" />
+          </div>
+          <div class="sm:col-span-4">
+            <label class="text-xs text-emerald-400 block mb-1">category</label>
+            <select id="expense-category" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400"></select>
+          </div>
+          <div class="sm:col-span-5">
+            <label class="text-xs text-emerald-400 block mb-1">note / description</label>
+            <div class="flex gap-2">
+              <input id="expense-note" type="text" placeholder="what was this for?" class="w-full bg-black border border-emerald-600 rounded px-3 py-2 text-emerald-100 focus:outline-none focus:border-emerald-400" onkeydown="if(event.key === 'Enter') addExpense()" />
+              <button onclick="addExpense()" class="bg-emerald-950 text-emerald-200 border border-emerald-500 px-4 rounded font-bold hover:bg-emerald-900 glow-text">[add]</button>
             </div>
           </div>
         </div>
 
-        <!-- Analytics Dashboard Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
-            <span class="text-xs text-emerald-400 font-bold">// month-to-date total</span>
-            <div id="stat-mtd" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+        <!-- Analytics Controls & Dashboard -->
+        <div class="space-y-3">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-emerald-400 font-bold">// forecast horizon:</span>
+            <div class="flex gap-2 bg-black border border-emerald-700 p-1 rounded">
+              <button id="btn-mode-month" onclick="setBudgetHorizon('month')" class="px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900">month</button>
+              <button id="btn-mode-week" onclick="setBudgetHorizon('week')" class="px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200">week</button>
+            </div>
           </div>
-          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
-            <span class="text-xs text-emerald-400 font-bold">// daily average</span>
-            <div id="stat-daily-avg" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00 / day</div>
-          </div>
-          <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
-            <span class="text-xs text-emerald-400 font-bold">// estimated monthly spend</span>
-            <div id="stat-projection" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+              <span id="label-todate" class="text-xs text-emerald-400 font-bold">// period-to-date total</span>
+              <div id="stat-mtd" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+            </div>
+            <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+              <span class="text-xs text-emerald-400 font-bold">// daily average</span>
+              <div id="stat-daily-avg" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00 / day</div>
+            </div>
+            <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
+              <span id="label-projection" class="text-xs text-emerald-400 font-bold">// estimated period spend</span>
+              <div id="stat-projection" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
+            </div>
           </div>
         </div>
 
         <!-- Category Breakdown -->
         <section class="space-y-3 pt-2">
-          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// spending by category (this month)</h3>
+          <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// spending by category (current period)</h3>
           <div id="category-breakdown" class="space-y-2"></div>
         </section>
 
@@ -266,14 +315,20 @@
     let unsubTasks = null;
     let unsubHabits = null;
     let unsubExpenses = null;
+    let unsubUserConfig = null;
 
     let targetList = 'now';
     let laterMinimized = false;
     let completedMinimized = false;
     let draggedId = null;
+    
     let todos = [];
     let habits = [];
     let expenses = [];
+    let categories = ['food', 'groceries', 'transport', 'gear', 'bills', 'misc'];
+    let monthStartDay = 1;
+    let budgetHorizon = 'month'; // 'month' or 'week'
+
     let collapsedSublists = {};
     let activeSubtaskInputId = null;
 
@@ -308,6 +363,7 @@
         if (unsubTasks) unsubTasks();
         if (unsubHabits) unsubHabits();
         if (unsubExpenses) unsubExpenses();
+        if (unsubUserConfig) unsubUserConfig();
         document.getElementById('app-screen').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
       }
@@ -385,6 +441,21 @@
       if (unsubTasks) unsubTasks();
       if (unsubHabits) unsubHabits();
       if (unsubExpenses) unsubExpenses();
+      if (unsubUserConfig) unsubUserConfig();
+
+      // Sync User Settings
+      unsubUserConfig = db.collection('users').doc(targetUid).onSnapshot(doc => {
+        if (doc.exists && doc.data()) {
+          const data = doc.data();
+          if (data.categories) categories = data.categories;
+          if (data.monthStartDay) {
+            monthStartDay = data.monthStartDay;
+            document.getElementById('config-start-day').value = monthStartDay;
+          }
+        }
+        updateCategorySelects();
+        renderBudget();
+      });
 
       // Sync Tasks
       unsubTasks = db.collection('users').doc(targetUid).collection('tasks').onSnapshot((snapshot) => {
@@ -574,27 +645,43 @@
       if (getSharedUserId() || !currentUser) return;
       const input = document.getElementById('habit-input');
       const cat = document.getElementById('habit-category').value;
+      const countInput = document.getElementById('habit-count');
+      const targetCount = parseInt(countInput.value) || 1;
       const val = input.value.trim().toLowerCase();
       if (!val) return;
 
       const habitId = Date.now().toString();
-      const newHabit = { text: val, category: cat, completedDates: [], createdAt: new Date().toISOString() };
+      const newHabit = {
+        text: val,
+        category: cat,
+        targetCount: targetCount,
+        dailyLogs: {}, // e.g., { "2026-10-12": 3 }
+        createdAt: new Date().toISOString()
+      };
       input.value = '';
+      countInput.value = '1';
       await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).set(newHabit);
     }
 
-    async function toggleHabitToday(habitId) {
+    async function updateHabitSlot(habitId, targetCount, slotIndex) {
       if (getSharedUserId() || !currentUser) return;
       const habit = habits.find(h => h.id === habitId);
       if (!habit) return;
+
       const today = new Date().toISOString().split('T')[0];
-      let dates = habit.completedDates || [];
-      if (dates.includes(today)) {
-        dates = dates.filter(d => d !== today);
+      const logs = habit.dailyLogs || {};
+      const currentDone = logs[today] || 0;
+
+      // Toggle logic for slot click
+      let newDone = currentDone;
+      if (slotIndex < currentDone) {
+        newDone = slotIndex; // Uncheck down to here
       } else {
-        dates.push(today);
+        newDone = slotIndex + 1; // Check up to here
       }
-      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ completedDates: dates });
+
+      logs[today] = newDone;
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ dailyLogs: logs });
     }
 
     async function deleteHabit(habitId) {
@@ -602,7 +689,102 @@
       await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).delete();
     }
 
+    // Calculate Consecutive Spree Days
+    function calculateSpree() {
+      if (habits.length === 0) return 0;
+      let spree = 0;
+      let checkDate = new Date();
+
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        const allCompleteForDate = habits.every(h => {
+          const target = h.targetCount || 1;
+          const done = (h.dailyLogs && h.dailyLogs[dateStr]) || 0;
+          return done >= target;
+        });
+
+        if (allCompleteForDate) {
+          spree++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          // If checking today and incomplete, check if yesterday was complete
+          if (spree === 0 && dateStr === new Date().toISOString().split('T')[0]) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            const yesterdayStr = checkDate.toISOString().split('T')[0];
+            const yesterdayComplete = habits.every(h => {
+              const target = h.targetCount || 1;
+              const done = (h.dailyLogs && h.dailyLogs[yesterdayStr]) || 0;
+              return done >= target;
+            });
+            if (yesterdayComplete) {
+              // Spree continues from yesterday
+              spree = 0; // We keep searching back
+              continue;
+            }
+          }
+          break;
+        }
+      }
+      return spree;
+    }
+
     // ================= BUDGET FUNCTIONS =================
+    function toggleBudgetSettings() {
+      const drawer = document.getElementById('budget-settings-drawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    async function saveBudgetConfig() {
+      if (getSharedUserId() || !currentUser) return;
+      const day = parseInt(document.getElementById('config-start-day').value) || 1;
+      monthStartDay = Math.min(Math.max(day, 1), 28);
+      await db.collection('users').doc(currentUser.uid).set({ monthStartDay: monthStartDay }, { merge: true });
+      toggleBudgetSettings();
+    }
+
+    async function addCustomCategory() {
+      if (getSharedUserId() || !currentUser) return;
+      const input = document.getElementById('new-cat-input');
+      const val = input.value.trim().toLowerCase();
+      if (!val || categories.includes(val)) return;
+
+      categories.push(val);
+      input.value = '';
+      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+    }
+
+    async function removeCategory(catName) {
+      if (getSharedUserId() || !currentUser) return;
+      categories = categories.filter(c => c !== catName);
+      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+    }
+
+    function updateCategorySelects() {
+      const select = document.getElementById('expense-category');
+      const chips = document.getElementById('category-chips');
+      select.innerHTML = '';
+      chips.innerHTML = '';
+
+      categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.innerText = cat;
+        select.appendChild(opt);
+
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center gap-1 bg-black border border-emerald-700 px-2 py-0.5 rounded text-emerald-300 text-xs';
+        chip.innerHTML = `${cat} <button onclick="removeCategory('${cat}')" class="text-rose-400 hover:text-rose-200 font-bold ml-1">x</button>`;
+        chips.appendChild(chip);
+      });
+    }
+
+    function setBudgetHorizon(mode) {
+      budgetHorizon = mode;
+      document.getElementById('btn-mode-month').className = mode === 'month' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
+      document.getElementById('btn-mode-week').className = mode === 'week' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
+      renderBudget();
+    }
+
     async function addExpense() {
       if (getSharedUserId() || !currentUser) return;
       const amountInput = document.getElementById('expense-amount');
@@ -628,6 +810,38 @@
     async function deleteExpense(expenseId) {
       if (getSharedUserId() || !currentUser) return;
       await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).delete();
+    }
+
+    // Calculate start date of current budget cycle
+    function getBudgetPeriodRange() {
+      const now = new Date();
+      if (budgetHorizon === 'week') {
+        const start = new Date(now);
+        const day = start.getDay(); // 0 (Sun) to 6 (Sat)
+        start.setDate(start.getDate() - day);
+        start.setHours(0,0,0,0);
+
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        end.setHours(23,59,59,999);
+
+        const daysPassed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
+        return { start, end, daysPassed, totalDays: 7 };
+      } else {
+        // Month Cycle based on monthStartDay
+        let start = new Date(now.getFullYear(), now.getMonth(), monthStartDay, 0, 0, 0);
+        if (now.getDate() < monthStartDay) {
+          start = new Date(now.getFullYear(), now.getMonth() - 1, monthStartDay, 0, 0, 0);
+        }
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + 1);
+        end.setDate(end.getDate() - 1);
+        end.setHours(23,59,59,999);
+
+        const daysPassed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
+        const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        return { start, end, daysPassed, totalDays };
+      }
     }
 
     // ================= RENDER ENGINE =================
@@ -761,21 +975,37 @@
 
       if (mentalHabits.length === 0) mentalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no mental habits set</p>';
       else mentalHabits.forEach(h => mentalContainer.appendChild(createHabitElement(h, today)));
+
+      // Render Spree Counter
+      const spree = calculateSpree();
+      document.getElementById('perfect-spree-counter').innerText = `${spree} DAYS 🔥`;
     }
 
     function createHabitElement(habit, today) {
       const div = document.createElement('div');
-      const isCompletedToday = (habit.completedDates || []).includes(today);
       const isReadOnly = Boolean(getSharedUserId());
+      const targetCount = habit.targetCount || 1;
+      const currentDone = (habit.dailyLogs && habit.dailyLogs[today]) || 0;
+      const isFullyDone = currentDone >= targetCount;
+
+      let slotsHtml = '';
+      for (let i = 0; i < targetCount; i++) {
+        const checked = i < currentDone;
+        if (isReadOnly) {
+          slotsHtml += `<span class="text-emerald-500 font-bold">${checked ? '[x]' : '[ ]'}</span>`;
+        } else {
+          slotsHtml += `<button onclick="updateHabitSlot('${habit.id}', ${targetCount}, ${i})" class="text-emerald-200 font-bold hover:text-emerald-100 glow-text">${checked ? '[x]' : '[ ]'}</button>`;
+        }
+      }
 
       div.className = `group flex items-center justify-between p-3 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box`;
       div.innerHTML = `
         <div class="flex items-center gap-3">
-          ${isReadOnly ? `<span class="text-emerald-500 font-bold">${isCompletedToday ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleHabitToday('${habit.id}')" class="text-emerald-200 font-bold hover:text-emerald-100 glow-text">${isCompletedToday ? '[x]' : '[ ]'}</button>`}
-          <span class="text-sm sm:text-base font-medium ${isCompletedToday ? 'line-through text-emerald-600' : 'text-emerald-100 glow-text'}">${habit.text}</span>
+          <div class="flex items-center gap-1.5">${slotsHtml}</div>
+          <span class="text-sm sm:text-base font-medium ${isFullyDone ? 'line-through text-emerald-600' : 'text-emerald-100 glow-text'}">${habit.text}</span>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-xs text-emerald-400/90 font-medium">streak: ${(habit.completedDates || []).length} days</span>
+          <span class="text-xs text-emerald-400/90 font-medium">${currentDone}/${targetCount} today</span>
           ${!isReadOnly ? `<button onclick="deleteHabit('${habit.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">[del]</button>` : ''}
         </div>
       `;
@@ -783,39 +1013,37 @@
     }
 
     function renderBudget() {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth();
-      const currentDay = now.getDate();
-      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const { start, end, daysPassed, totalDays } = getBudgetPeriodRange();
 
-      // Filter current month expenses
-      const monthExpenses = expenses.filter(e => {
+      // Filter period expenses
+      const periodExpenses = expenses.filter(e => {
         const d = new Date(e.createdAt);
-        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+        return d >= start && d <= end;
       });
 
-      const mtdTotal = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
-      const dailyAvg = currentDay > 0 ? mtdTotal / currentDay : 0;
-      const projection = dailyAvg * daysInMonth;
+      const periodTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const dailyAvg = periodTotal / daysPassed;
+      const projection = dailyAvg * totalDays;
 
-      document.getElementById('stat-mtd').innerText = `$${mtdTotal.toFixed(2)}`;
+      document.getElementById('label-todate').innerText = budgetHorizon === 'week' ? '// week-to-date total' : '// month-to-date total';
+      document.getElementById('label-projection').innerText = budgetHorizon === 'week' ? '// estimated weekly spend' : '// estimated monthly spend';
+
+      document.getElementById('stat-mtd').innerText = `$${periodTotal.toFixed(2)}`;
       document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
       document.getElementById('stat-projection').innerText = `$${projection.toFixed(2)}`;
 
       // Category breakdown calculation
       const catTotals = {};
-      monthExpenses.forEach(e => {
+      periodExpenses.forEach(e => {
         catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
       });
 
       const breakdownContainer = document.getElementById('category-breakdown');
       breakdownContainer.innerHTML = '';
-      const categories = ['food', 'groceries', 'transport', 'gear', 'bills', 'misc'];
 
       categories.forEach(cat => {
         const total = catTotals[cat] || 0;
-        const pct = mtdTotal > 0 ? (total / mtdTotal) * 100 : 0;
+        const pct = periodTotal > 0 ? (total / periodTotal) * 100 : 0;
         const row = document.createElement('div');
         row.className = 'space-y-1';
         row.innerHTML = `

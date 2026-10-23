@@ -44,7 +44,7 @@
   </style>
 </head>
 <body class="min-h-screen p-4 sm:p-6 antialiased selection:bg-emerald-800 selection:text-emerald-100 relative">
-  <div class="fixed inset-0 crt-overlay z-50 pointer-events-none"></div>
+  <div class="fixed inset-0 crt-overlay z-40 pointer-events-none"></div>
 
   <div class="max-w-2xl mx-auto py-6 sm:py-10 relative z-10">
     
@@ -225,9 +225,22 @@
               </div>
             </div>
           </div>
-          <div class="pt-2">
+          <div class="pt-2 border-t border-emerald-900/60">
             <label class="text-emerald-400 text-xs block mb-1">current categories (click [x] to remove):</label>
             <div id="category-chips" class="flex flex-wrap gap-2 pt-1"></div>
+          </div>
+
+          <!-- Data Management & Reset Section -->
+          <div class="pt-4 border-t border-emerald-900/80 space-y-3">
+            <label class="text-emerald-400 text-xs block font-bold">// system data management</label>
+            <div class="flex flex-wrap gap-3">
+              <button onclick="openResetModal('expenses')" class="bg-emerald-950 text-rose-400 border border-rose-600/60 text-xs px-3 py-1.5 rounded font-bold hover:bg-rose-950/40 glow-text">
+                [reset expenses database]
+              </button>
+              <button onclick="openResetModal('all')" class="bg-emerald-950 text-rose-400 border border-rose-600/60 text-xs px-3 py-1.5 rounded font-bold hover:bg-rose-950/40 glow-text">
+                [factory reset all data]
+              </button>
+            </div>
           </div>
         </div>
 
@@ -333,6 +346,35 @@
     </div>
   </div>
 
+  <!-- Terminal Reset Confirmation Modal -->
+  <div id="reset-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-black border-2 border-rose-600 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl glow-box" style="box-shadow: 0 0 20px rgba(225, 29, 72, 0.3);">
+      <div class="border-b border-rose-800 pb-3">
+        <h3 class="text-sm font-bold text-rose-400 tracking-wider uppercase">> warning: destructive_action</h3>
+      </div>
+      
+      <p id="reset-modal-desc" class="text-xs text-emerald-300/90 leading-relaxed">
+        This action will permanently delete data from your Firestore database. This cannot be undone.
+      </p>
+
+      <div class="space-y-2 pt-2">
+        <label class="text-xs text-emerald-400 block">type <span class="text-rose-400 font-bold">"reset"</span> to confirm:</label>
+        <input 
+          id="reset-confirm-input" 
+          type="text" 
+          placeholder="type reset here..." 
+          class="w-full bg-black border border-rose-600 rounded px-3 py-2 text-xs text-emerald-100 placeholder-emerald-800 focus:outline-none focus:border-rose-400"
+          onkeydown="if(event.key === 'Enter') executeReset()"
+        />
+      </div>
+
+      <div class="flex justify-end gap-3 pt-4 border-t border-rose-950">
+        <button onclick="closeResetModal()" class="text-xs text-emerald-400 hover:text-emerald-200 px-3 py-1.5 font-bold">[cancel]</button>
+        <button onclick="executeReset()" class="bg-rose-950 text-rose-200 border border-rose-600 text-xs px-4 py-1.5 rounded font-bold hover:bg-rose-900 glow-text">[execute wipe]</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAAN10JXtcd4-ikgXCZxABGPYBRfDH5C5g",
@@ -370,13 +412,13 @@
 
     let collapsedSublists = {};
     let activeSubtaskInputId = null;
+    let pendingResetType = null;
 
     function getSharedUserId() {
       const params = new URLSearchParams(window.location.search);
       return params.get('share');
     }
 
-    // Set today as default date picker value
     const todayStr = new Date().toISOString().split('T')[0];
     const currentYearMonth = todayStr.substring(0, 7);
 
@@ -649,149 +691,71 @@
 
     function toggleLater() {
       laterMinimized = !laterMinimized;
-      document.getElementById('btn-toggle-later').innerText = laterMinimized ? '[+] expand' : '[-] minimize';
       render();
     }
 
     function toggleCompleted() {
       completedMinimized = !completedMinimized;
-      document.getElementById('btn-toggle-completed').innerText = completedMinimized ? '[+] expand' : '[-] minimize';
       render();
     }
 
+    // Drag and Drop Logic
     function handleDragStart(e, id) {
       if (getSharedUserId()) return;
       draggedId = id;
       e.dataTransfer.setData('text/plain', id);
-      e.stopPropagation();
     }
 
     function allowDrop(e) {
-      if (!getSharedUserId()) e.preventDefault();
+      e.preventDefault();
     }
 
-    async function handleDropOnTask(e, targetTaskId) {
-      if (getSharedUserId() || !currentUser || !draggedId || draggedId === targetTaskId) return;
+    async function handleDrop(e, targetListName) {
       e.preventDefault();
-      e.stopPropagation();
-      const sourceTask = todos.find(t => t.id === draggedId);
-      const targetTask = todos.find(t => t.id === targetTaskId);
-      if (!sourceTask || !targetTask) return;
-      const targetSection = targetTask.list;
-      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
-      const targetIdx = sectionTasks.findIndex(t => t.id === targetTaskId);
-      const rect = e.currentTarget.getBoundingClientRect();
-      const insertIdx = (e.clientY - rect.top) > rect.height / 2 ? targetIdx + 1 : targetIdx;
-      sectionTasks.splice(insertIdx, 0, sourceTask);
-      const batch = db.batch();
-      sectionTasks.forEach((t, idx) => {
-        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
-        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
-      });
-      draggedId = null;
-      await batch.commit();
-    }
-
-    async function handleDrop(e, targetSection) {
-      if (getSharedUserId() || !currentUser || !draggedId) return;
-      e.preventDefault();
+      if (getSharedUserId() || !draggedId || !currentUser) return;
       const task = todos.find(t => t.id === draggedId);
-      if (!task || task.completed) return;
-      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
-      sectionTasks.push(task);
-      const batch = db.batch();
-      sectionTasks.forEach((t, idx) => {
-        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
-        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
-      });
+      if (!task) return;
+      if (task.list !== targetListName) {
+        await db.collection('users').doc(currentUser.uid).collection('tasks').doc(draggedId).update({ list: targetListName, previousList: targetListName });
+      }
       draggedId = null;
-      await batch.commit();
     }
 
-    // ================= HEALTH HABIT FUNCTIONS =================
+    // ================= HEALTH FUNCTIONS =================
     async function addHabit() {
       if (getSharedUserId() || !currentUser) return;
       const input = document.getElementById('habit-input');
-      const cat = document.getElementById('habit-category').value;
-      const countInput = document.getElementById('habit-count');
-      const targetCount = parseInt(countInput.value) || 1;
-      const val = input.value.trim().toLowerCase();
-      if (!val) return;
+      const text = input.value.trim().toLowerCase();
+      if (!text) return;
 
-      const habitId = Date.now().toString();
+      const targetCount = parseInt(document.getElementById('habit-count').value) || 1;
+      const category = document.getElementById('habit-category').value;
+
       const newHabit = {
-        text: val,
-        category: cat,
-        targetCount: targetCount,
-        dailyLogs: {},
-        createdAt: new Date().toISOString()
+        text, targetCount, category, createdAt: new Date().toISOString(),
+        history: { [todayStr]: 0 }
       };
+
       input.value = '';
-      countInput.value = '1';
-      updateSyncStatus('saving habit...');
-      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).set(newHabit);
-      updateSyncStatus('synced');
+      await db.collection('users').doc(currentUser.uid).collection('habits').add(newHabit);
     }
 
-    async function updateHabitSlot(habitId, targetCount, slotIndex) {
+    async function logHabitProgress(habitId, delta) {
       if (getSharedUserId() || !currentUser) return;
       const habit = habits.find(h => h.id === habitId);
       if (!habit) return;
 
-      const today = new Date().toISOString().split('T')[0];
-      const logs = Object.assign({}, habit.dailyLogs || {});
-      const currentDone = logs[today] || 0;
+      const currentHistory = habit.history || {};
+      const currentVal = currentHistory[todayStr] || 0;
+      const newVal = Math.max(0, currentVal + delta);
 
-      let newDone = currentDone;
-      if (slotIndex < currentDone) {
-        newDone = slotIndex;
-      } else {
-        newDone = slotIndex + 1;
-      }
-
-      logs[today] = newDone;
-      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ dailyLogs: logs });
+      currentHistory[todayStr] = newVal;
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ history: currentHistory });
     }
 
     async function deleteHabit(habitId) {
       if (getSharedUserId() || !currentUser) return;
       await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).delete();
-    }
-
-    function calculateSpree() {
-      if (habits.length === 0) return 0;
-      let spree = 0;
-      let checkDate = new Date();
-
-      while (true) {
-        const dateStr = checkDate.toISOString().split('T')[0];
-        const allCompleteForDate = habits.every(h => {
-          const target = h.targetCount || 1;
-          const done = (h.dailyLogs && h.dailyLogs[dateStr]) || 0;
-          return done >= target;
-        });
-
-        if (allCompleteForDate) {
-          spree++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          if (spree === 0 && dateStr === new Date().toISOString().split('T')[0]) {
-            checkDate.setDate(checkDate.getDate() - 1);
-            const yesterdayStr = checkDate.toISOString().split('T')[0];
-            const yesterdayComplete = habits.every(h => {
-              const target = h.targetCount || 1;
-              const done = (h.dailyLogs && h.dailyLogs[yesterdayStr]) || 0;
-              return done >= target;
-            });
-            if (yesterdayComplete) {
-              spree = 0;
-              continue;
-            }
-          }
-          break;
-        }
-      }
-      return spree;
     }
 
     // ================= BUDGET FUNCTIONS =================
@@ -800,12 +764,27 @@
       drawer.classList.toggle('hidden');
     }
 
+    function updateCategorySelects() {
+      const select = document.getElementById('expense-category');
+      select.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      renderCategoryChips();
+    }
+
+    function renderCategoryChips() {
+      const chips = document.getElementById('category-chips');
+      chips.innerHTML = categories.map(c => `
+        <span class="inline-flex items-center gap-1.5 bg-emerald-950 border border-emerald-600 px-2 py-0.5 rounded text-xs text-emerald-200">
+          ${c}
+          <button onclick="removeCategory('${c}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>
+        </span>
+      `).join('');
+    }
+
     async function saveBudgetConfig() {
       if (getSharedUserId() || !currentUser) return;
-      const day = parseInt(document.getElementById('config-start-day').value) || 1;
-      monthStartDay = Math.min(Math.max(day, 1), 28);
+      const val = parseInt(document.getElementById('config-start-day').value) || 1;
+      monthStartDay = Math.min(28, Math.max(1, val));
       await db.collection('users').doc(currentUser.uid).set({ monthStartDay: monthStartDay }, { merge: true });
-      toggleBudgetSettings();
     }
 
     async function addCustomCategory() {
@@ -814,38 +793,15 @@
       const val = input.value.trim().toLowerCase();
       if (!val || categories.includes(val)) return;
 
-      const updatedCategories = [...categories, val];
+      categories.push(val);
       input.value = '';
-      updateSyncStatus('saving category...');
-      await db.collection('users').doc(currentUser.uid).set({ categories: updatedCategories }, { merge: true });
-      updateSyncStatus('synced');
+      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
     }
 
-    async function removeCategory(catName) {
+    async function removeCategory(cat) {
       if (getSharedUserId() || !currentUser) return;
-      const updatedCategories = categories.filter(c => c !== catName);
-      await db.collection('users').doc(currentUser.uid).set({ categories: updatedCategories }, { merge: true });
-    }
-
-    function updateCategorySelects() {
-      const select = document.getElementById('expense-category');
-      const chips = document.getElementById('category-chips');
-      if (!select || !chips) return;
-      
-      select.innerHTML = '';
-      chips.innerHTML = '';
-
-      categories.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat;
-        opt.innerText = cat;
-        select.appendChild(opt);
-
-        const chip = document.createElement('span');
-        chip.className = 'inline-flex items-center gap-1 bg-black border border-emerald-700 px-2 py-0.5 rounded text-emerald-300 text-xs';
-        chip.innerHTML = `${cat} <button onclick="removeCategory('${cat}')" class="text-rose-400 hover:text-rose-200 font-bold ml-1">x</button>`;
-        chips.appendChild(chip);
-      });
+      categories = categories.filter(c => c !== cat);
+      await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
     }
 
     function setBudgetHorizon(mode) {
@@ -857,405 +813,412 @@
 
     async function addExpense() {
       if (getSharedUserId() || !currentUser) return;
-      const amountInput = document.getElementById('expense-amount');
-      const catInput = document.getElementById('expense-category');
+      const amtInput = document.getElementById('expense-amount');
       const noteInput = document.getElementById('expense-note');
+      const catSelect = document.getElementById('expense-category');
 
-      const amount = parseFloat(amountInput.value);
+      const amount = parseFloat(amtInput.value);
       if (isNaN(amount) || amount <= 0) return;
 
-      const selectedCategory = catInput.value || (categories.length > 0 ? categories[0] : 'misc');
-      const expenseId = Date.now().toString();
       const newExpense = {
-        amount: amount,
-        category: selectedCategory,
-        note: noteInput.value.trim().toLowerCase() || 'expense',
+        amount, category: catSelect.value, note: noteInput.value.trim(),
         createdAt: new Date().toISOString()
       };
 
-      amountInput.value = '';
+      amtInput.value = '';
       noteInput.value = '';
-      updateSyncStatus('saving expense...');
-      await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).set(newExpense);
-      updateSyncStatus('synced');
+      await db.collection('users').doc(currentUser.uid).collection('expenses').add(newExpense);
     }
 
-    async function deleteExpense(expenseId) {
+    async function deleteExpense(id) {
       if (getSharedUserId() || !currentUser) return;
-      await db.collection('users').doc(currentUser.uid).collection('expenses').doc(expenseId).delete();
+      await db.collection('users').doc(currentUser.uid).collection('expenses').doc(id).delete();
     }
 
-    function getBudgetPeriodRange() {
-      const now = new Date();
-      if (budgetHorizon === 'week') {
-        const start = new Date(now);
-        const day = start.getDay();
-        start.setDate(start.getDate() - day);
-        start.setHours(0,0,0,0);
-
-        const end = new Date(start);
-        end.setDate(end.getDate() + 6);
-        end.setHours(23,59,59,999);
-
-        const daysPassed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
-        return { start, end, daysPassed, totalDays: 7 };
+    // ================= DATA RESET & SAFETY MODAL =================
+    function openResetModal(type) {
+      if (getSharedUserId() || !currentUser) return;
+      pendingResetType = type;
+      
+      const descEl = document.getElementById('reset-modal-desc');
+      if (type === 'expenses') {
+        descEl.innerText = 'WARNING: This will permanently delete ALL logged expenses from your database. Your categories and settings will remain intact.';
       } else {
-        let start = new Date(now.getFullYear(), now.getMonth(), monthStartDay, 0, 0, 0);
-        if (now.getDate() < monthStartDay) {
-          start = new Date(now.getFullYear(), now.getMonth() - 1, monthStartDay, 0, 0, 0);
-        }
-        const end = new Date(start);
-        end.setMonth(end.getMonth() + 1);
-        end.setDate(end.getDate() - 1);
-        end.setHours(23,59,59,999);
-
-        const daysPassed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
-        const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-        return { start, end, daysPassed, totalDays };
+        descEl.innerText = 'CRITICAL WARNING: This will permanently delete ALL tasks, habits, expenses, and journal entries across your entire terminal OS database.';
       }
+
+      document.getElementById('reset-confirm-input').value = '';
+      document.getElementById('reset-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('reset-confirm-input').focus(), 50);
+    }
+
+    function closeResetModal() {
+      pendingResetType = null;
+      document.getElementById('reset-modal').classList.add('hidden');
+    }
+
+    async function executeReset() {
+      const inputVal = document.getElementById('reset-confirm-input').value.trim();
+      if (inputVal !== 'reset') {
+        alert('Confirmation failed. You must type exactly "reset" to proceed.');
+        return;
+      }
+
+      if (!currentUser || !pendingResetType) return;  
+      const type = pendingResetType;
+      closeResetModal();
+      updateSyncStatus('wiping data...');
+
+      try {
+        const userRef = db.collection('users').doc(currentUser.uid);
+        
+        if (type === 'expenses') {
+          await deleteCollection(userRef.collection('expenses'), 100);
+          updateSyncStatus('expenses wiped');
+        } else if (type === 'all') {
+          await deleteCollection(userRef.collection('tasks'), 100);
+          await deleteCollection(userRef.collection('habits'), 100);
+          await deleteCollection(userRef.collection('expenses'), 100);
+          await deleteCollection(userRef.collection('journal'), 100);
+          updateSyncStatus('system factory reset complete');
+        }
+      } catch (err) {
+        console.error("Reset failed:", err);
+        updateSyncStatus('reset error');
+        alert('Error wiping data: ' + err.message);
+      }
+    }
+
+    async function deleteCollection(collectionRef, batchSize) {
+      const query = collectionRef.limit(batchSize);
+      return new Promise((resolve, reject) => {
+        deleteQueryBatch(query, resolve, reject);
+      });
+    }
+
+    function deleteQueryBatch(query, resolve, reject) {
+      query.get().then((snapshot) => {
+        if (snapshot.size === 0) {
+          return resolve();
+        }
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        batch.commit().then(() => {
+          setTimeout(() => {
+            deleteQueryBatch(query, resolve, reject);
+          }, 0);
+        }).catch(reject);
+      }).catch(reject);
     }
 
     // ================= JOURNAL FUNCTIONS =================
     async function addJournalEntry() {
       if (getSharedUserId() || !currentUser) return;
-      const dateInput = document.getElementById('journal-date');
-      const contentInput = document.getElementById('journal-content');
+      const dateVal = document.getElementById('journal-date').value;
+      const content = document.getElementById('journal-content').value.trim();
+      if (!content || !dateVal) return;
 
-      const entryDate = dateInput.value || todayStr;
-      const content = contentInput.value.trim();
-
-      if (!content) return;
-
-      const entryId = Date.now().toString();
       const newEntry = {
-        entryDate: entryDate,
-        content: content,
-        createdAt: new Date().toISOString()
+        entryDate: dateVal, content, createdAt: new Date().toISOString()
       };
 
-      contentInput.value = '';
-      updateSyncStatus('saving journal entry...');
-      await db.collection('users').doc(currentUser.uid).collection('journal').doc(entryId).set(newEntry);
-      updateSyncStatus('synced');
+      document.getElementById('journal-content').value = '';
+      await db.collection('users').doc(currentUser.uid).collection('journal').add(newEntry);
     }
 
-    async function deleteJournalEntry(entryId) {
+    async function deleteJournalEntry(id) {
       if (getSharedUserId() || !currentUser) return;
-      await db.collection('users').doc(currentUser.uid).collection('journal').doc(entryId).delete();
+      await db.collection('users').doc(currentUser.uid).collection('journal').doc(id).delete();
     }
 
     function exportMonthlyLog() {
       const selectedMonth = document.getElementById('export-month').value;
-      if (!selectedMonth) {
-        alert('Please select a month to export.');
+      if (!selectedMonth) return;
+
+      const filtered = journalEntries.filter(e => e.entryDate && e.entryDate.startsWith(selectedMonth));
+      if (filtered.length === 0) {
+        alert(`No journal entries found for ${selectedMonth}`);
         return;
       }
 
-      // Filter entries matching the selected YYYY-MM
-      const filteredEntries = journalEntries.filter(entry => entry.entryDate.startsWith(selectedMonth));
+      let fileText = `========================================\n`;
+      fileText += ` TERMINAL OS - JOURNAL LOG [${selectedMonth}]\n`;
+      fileText += ` Exported on: ${new Date().toLocaleString()}\n`;
+      fileText += `========================================\n\n`;
 
-      if (filteredEntries.length === 0) {
-        alert(`No journal entries found for ${selectedMonth}.`);
-        return;
-      }
-
-      // Sort chronologically ascending for the exported file
-      const sorted = [...filteredEntries].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
-
-      let exportText = `==================================================\n`;
-      exportText += `          TERMINAL OS - JOURNAL LOG EXPORT        \n`;
-      exportText += `          PERIOD: ${selectedMonth}                       \n`;
-      exportText += `==================================================\n\n`;
-
-      sorted.forEach(entry => {
-        exportText += `[DATE]: ${entry.entryDate}\n`;
-        exportText += `[CREATED AT]: ${formatDate(entry.createdAt)}\n`;
-        exportText += `--------------------------------------------------\n`;
-        exportText += `${entry.content}\n\n`;
-        exportText += `==================================================\n\n`;
+      filtered.forEach(e => {
+        fileText += `[DATE: ${e.entryDate}]\n`;
+        fileText += `${e.content}\n`;
+        fileText += `----------------------------------------\n\n`;
       });
 
-      // Download file blob
-      const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+      const blob = new Blob([fileText], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `journal_export_${selectedMonth.replace('-', '_')}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `journal_log_${selectedMonth}.txt`;
+      a.click();
       URL.revokeObjectURL(url);
     }
 
-    // ================= RENDER ENGINE =================
+    // ================= RENDERING ENGINE =================
     function render() {
       if (currentTab === 'tasks') renderTasks();
-      if (currentTab === 'health') renderHealth();
-      if (currentTab === 'budget') renderBudget();
-      if (currentTab === 'journal') renderJournal();
+      else if (currentTab === 'health') renderHealth();
+      else if (currentTab === 'budget') renderBudget();
+      else if (currentTab === 'journal') renderJournal();
     }
 
     function renderTasks() {
-      const nowContainer = document.getElementById('list-now');
-      const laterContainer = document.getElementById('list-later');
-      const completedContainer = document.getElementById('list-completed');
+      const isReadOnly = !!getSharedUserId();
+      const listNow = document.getElementById('list-now');
+      const listLater = document.getElementById('list-later');
+      const listComp = document.getElementById('list-completed');
 
-      nowContainer.innerHTML = '';
-      laterContainer.innerHTML = '';
-      completedContainer.innerHTML = '';
+      const nowTasks = todos.filter(t => !t.completed && t.list === 'now');
+      const laterTasks = todos.filter(t => !t.completed && t.list === 'later');
+      const compTasks = todos.filter(t => t.completed);
 
-      const activeTodos = todos.filter(t => !t.completed);
-      const nowItems = activeTodos.filter(t => t.list === 'now');
-      const laterItems = activeTodos.filter(t => t.list === 'later');
-      const completedItems = todos.filter(t => t.completed);
+      document.getElementById('pending-count').innerText = `${nowTasks.length + laterTasks.length} pending tasks`;
 
-      if (nowItems.length === 0) nowContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      else nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
+      listNow.innerHTML = nowTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no active tasks in now]</p>' : '';
+      nowTasks.forEach(t => listNow.appendChild(createTaskElement(t, isReadOnly)));
 
-      if (laterMinimized) laterContainer.innerHTML = '';
-      else if (laterItems.length === 0) laterContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      else laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
+      const btnLater = document.getElementById('btn-toggle-later');
+      btnLater.innerText = laterMinimized ? '[+] expand' : '[-] minimize';
+      listLater.className = laterMinimized ? 'hidden space-y-2.5' : 'space-y-2.5 min-h-[48px]';
+      listLater.innerHTML = laterTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no active tasks in later]</p>' : '';
+      if (!laterMinimized) laterTasks.forEach(t => listLater.appendChild(createTaskElement(t, isReadOnly)));
 
-      if (completedMinimized) completedContainer.innerHTML = '';
-      else if (completedItems.length === 0) completedContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
-      else completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
-
-      document.getElementById('pending-count').innerText = `${activeTodos.length} pending tasks`;
+      const btnComp = document.getElementById('btn-toggle-completed');
+      btnComp.innerText = completedMinimized ? '[+] expand' : '[-] minimize';
+      listComp.className = completedMinimized ? 'hidden space-y-2.5' : 'space-y-2.5 min-h-[48px]';
+      listComp.innerHTML = compTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no completed tasks]</p>' : '';
+      if (!completedMinimized) compTasks.forEach(t => listComp.appendChild(createTaskElement(t, isReadOnly)));
     }
 
-    function createTaskElement(todo) {
-      const div = document.createElement('div');
-      const isReadOnly = Boolean(getSharedUserId());
-      const subtasks = todo.subtasks || [];
-      const isCollapsed = Boolean(collapsedSublists[todo.id]);
-      const isInputActive = activeSubtaskInputId === todo.id;
-      
-      if (!todo.completed && !isReadOnly) {
-        div.draggable = true;
-        div.ondragstart = (e) => handleDragStart(e, todo.id);
-        div.ondragover = (e) => allowDrop(e);
-        div.ondrop = (e) => handleDropOnTask(e, todo.id);
-      }
+    function createTaskElement(task, isReadOnly) {
+      const card = document.createElement('div');
+      card.className = 'bg-black border border-emerald-600/80 rounded p-3 glow-box space-y-2';
+      card.draggable = !isReadOnly;
+      card.ondragstart = (e) => handleDragStart(e, task.id);
 
-      div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
-        todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'glow-box'
-      } ${isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`;
+      const subtasks = task.subtasks || [];
+      const subCompCount = subtasks.filter(s => s.completed).length;
+      const isSubCollapsed = !!collapsedSublists[task.id];
+      const isInputActive = activeSubtaskInputId === task.id;
 
-      const createdStr = formatDate(todo.createdAt);
-      const completedStr = formatDate(todo.completedAt);
+      card.innerHTML = `
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 overflow-hidden">
+            ${!isReadOnly ? `<input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')" class="accent-emerald-500 w-4 h-4 cursor-pointer"/>` : ''}
+            <span class="text-sm font-medium ${task.completed ? 'line-through text-emerald-700' : 'text-emerald-100'}">${task.text}</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            ${subtasks.length > 0 ? `
+              <button onclick="toggleSublistCollapse('${task.id}')" class="text-emerald-400 font-bold hover:text-emerald-200">
+                [${isSubCollapsed ? '+' : '-'}] ${subCompCount}/${subtasks.length}
+              </button>
+            ` : ''}
+            ${!isReadOnly ? `
+              <button onclick="toggleSubtaskInput('${task.id}')" class="text-emerald-400 font-bold hover:text-emerald-200">[+sub]</button>
+              <button onclick="deleteTask('${task.id}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>
+            ` : ''}
+          </div>
+        </div>
 
-      let subtasksHtml = '';
-      if (subtasks.length > 0 && !isCollapsed) {
-        subtasksHtml = `
-          <div class="mt-3 pl-8 space-y-1.5 border-l-2 border-emerald-800/80">
+        ${subtasks.length > 0 && !isSubCollapsed ? `
+          <div class="pl-6 pt-1 space-y-1.5 border-l border-emerald-900/80">
             ${subtasks.map(s => `
-              <div class="flex items-center justify-between text-sm group/sub font-medium">
+              <div class="flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
-                  ${isReadOnly ? `<span class="text-emerald-500">${s.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleSubtask('${todo.id}', '${s.id}')" class="text-emerald-300 hover:text-emerald-100">${s.completed ? '[x]' : '[ ]'}</button>`}
-                  <span class="${s.completed ? 'line-through text-emerald-600' : 'text-emerald-200'}">${s.text}</span>
+                  ${!isReadOnly ? `<input type="checkbox" ${s.completed ? 'checked' : ''} onchange="toggleSubtask('${task.id}', '${s.id}')" class="accent-emerald-500 w-3 h-3"/>` : ''}
+                  <span class="${s.completed ? 'line-through text-emerald-800' : 'text-emerald-200'}">${s.text}</span>
                 </div>
-                ${!isReadOnly ? `<button onclick="deleteSubtask('${todo.id}', '${s.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover/sub:opacity-100 transition-opacity">[del]</button>` : ''}
+                ${!isReadOnly ? `<button onclick="deleteSubtask('${task.id}', '${s.id}')" class="text-rose-500 hover:text-rose-300 font-bold">[x]</button>` : ''}
               </div>
             `).join('')}
           </div>
-        `;
-      }
+        ` : ''}
 
-      let inlineInputHtml = '';
-      if (isInputActive && !isReadOnly) {
-        inlineInputHtml = `
-          <div class="mt-3 pl-8 border-l-2 border-emerald-600">
-            <div class="flex items-center gap-2 bg-black border border-emerald-600 rounded px-2.5 py-1.5">
-              <span class="text-xs text-emerald-400 font-bold">></span>
-              <input id="subtask-input-${todo.id}" type="text" placeholder="add subtask... (press enter)" class="w-full bg-transparent text-xs text-emerald-100 placeholder-emerald-700 focus:outline-none" onkeydown="if(event.key === 'Enter') submitSubtask('${todo.id}'); if(event.key === 'Escape') toggleSubtaskInput('${todo.id}');" />
-              <button onclick="submitSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold px-1">[add]</button>
-              <button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-600 hover:text-emerald-400 font-bold px-1">[x]</button>
-            </div>
+        ${isInputActive && !isReadOnly ? `
+          <div class="pl-6 pt-1 flex gap-2">
+            <input id="subtask-input-${task.id}" type="text" placeholder="new subtask..." class="w-full bg-black border border-emerald-700 text-xs px-2 py-1 text-emerald-100 focus:outline-none" onkeydown="if(event.key === 'Enter') submitSubtask('${task.id}')" />
+            <button onclick="submitSubtask('${task.id}')" class="bg-emerald-950 text-emerald-200 border border-emerald-600 text-xs px-2 py-1 font-bold">[add]</button>
           </div>
-        `;
-      }
-
-      div.innerHTML = `
-        <div class="flex items-center justify-between min-w-0">
-          <div class="flex items-center gap-4 min-w-0">
-            <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
-            ${isReadOnly ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">${todo.completed ? '[x]' : '[ ]'}</button>`}
-            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">${todo.text}</span>
-          </div>
-          <div class="flex items-center gap-3">
-            ${subtasks.length > 0 ? `<button onclick="toggleSublistCollapse('${todo.id}')" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold">${isCollapsed ? `[+] ${subtasks.length} subtasks` : '[-] minimize'}</button>` : ''}
-            ${!isReadOnly ? `<button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">+ subtask</button><button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">[del]</button>` : ''}
-          </div>
-        </div>
-        <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
-          ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
-          ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
-        </div>
-        ${subtasksHtml}
-        ${inlineInputHtml}
+        ` : ''}
       `;
 
-      if (isInputActive) {
-        setTimeout(() => {
-          const el = document.getElementById(`subtask-input-${todo.id}`);
-          if (el) el.focus();
-        }, 50);
-      }
-      return div;
+      return card;
     }
 
     function renderHealth() {
-      const physicalContainer = document.getElementById('list-habits-physical');
-      const mentalContainer = document.getElementById('list-habits-mental');
-      physicalContainer.innerHTML = '';
-      mentalContainer.innerHTML = '';
+      const isReadOnly = !!getSharedUserId();
+      const physicalList = document.getElementById('list-habits-physical');
+      const mentalList = document.getElementById('list-habits-mental');
 
-      const today = new Date().toISOString().split('T')[0];
       const physicalHabits = habits.filter(h => h.category === 'physical');
       const mentalHabits = habits.filter(h => h.category === 'mental');
 
-      if (physicalHabits.length === 0) physicalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no physical habits set</p>';
-      else physicalHabits.forEach(h => physicalContainer.appendChild(createHabitElement(h, today)));
+      physicalList.innerHTML = physicalHabits.length === 0 ? '<p class="text-xs text-emerald-700 italic">[no physical routines]</p>' : '';
+      physicalHabits.forEach(h => physicalList.appendChild(createHabitElement(h, isReadOnly)));
 
-      if (mentalHabits.length === 0) mentalContainer.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no mental habits set</p>';
-      else mentalHabits.forEach(h => mentalContainer.appendChild(createHabitElement(h, today)));
+      mentalList.innerHTML = mentalHabits.length === 0 ? '<p class="text-xs text-emerald-700 italic">[no mental routines]</p>' : '';
+      mentalHabits.forEach(h => mentalList.appendChild(createHabitElement(h, isReadOnly)));
 
-      const spree = calculateSpree();
+      // Calculate perfect spree (consecutive past days where all habits were met)
+      let spree = 0;
+      if (habits.length > 0) {
+        let checkDate = new Date();
+        while (true) {
+          const dateKey = checkDate.toISOString().split('T')[0];
+          const allMet = habits.every(h => ((h.history || {})[dateKey] || 0) >= (h.targetCount || 1));
+          if (allMet) {
+            spree++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+      }
       document.getElementById('perfect-spree-counter').innerText = `${spree} DAYS 🔥`;
     }
 
-    function createHabitElement(habit, today) {
-      const div = document.createElement('div');
-      const isReadOnly = Boolean(getSharedUserId());
-      const targetCount = habit.targetCount || 1;
-      const currentDone = (habit.dailyLogs && habit.dailyLogs[today]) || 0;
-      const isFullyDone = currentDone >= targetCount;
+    function createHabitElement(h, isReadOnly) {
+      const card = document.createElement('div');
+      card.className = 'bg-black border border-emerald-600/80 rounded p-3 flex items-center justify-between glow-box';
 
-      let slotsHtml = '';
-      for (let i = 0; i < targetCount; i++) {
-        const checked = i < currentDone;
-        if (isReadOnly) {
-          slotsHtml += `<span class="text-emerald-500 font-bold">${checked ? '[x]' : '[ ]'}</span>`;
-        } else {
-          slotsHtml += `<button onclick="updateHabitSlot('${habit.id}', ${targetCount}, ${i})" class="text-emerald-200 font-bold hover:text-emerald-100 glow-text">${checked ? '[x]' : '[ ]'}</button>`;
-        }
-      }
+      const history = h.history || {};
+      const count = history[todayStr] || 0;
+      const target = h.targetCount || 1;
+      const isDone = count >= target;
 
-      div.className = `group flex items-center justify-between p-3 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box`;
-      div.innerHTML = `
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1.5">${slotsHtml}</div>
-          <span class="text-sm sm:text-base font-medium ${isFullyDone ? 'line-through text-emerald-600' : 'text-emerald-100 glow-text'}">${habit.text}</span>
+      card.innerHTML = `
+        <div>
+          <span class="text-sm font-medium ${isDone ? 'text-emerald-300 font-bold glow-text' : 'text-emerald-100'}">${h.text}</span>
+          <span class="text-xs text-emerald-600 block">[${count} / ${target} completed today]</span>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-emerald-400/90 font-medium">${currentDone}/${targetCount} today</span>
-          ${!isReadOnly ? `<button onclick="deleteHabit('${habit.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">[del]</button>` : ''}
+        <div class="flex items-center gap-2">
+          ${!isReadOnly ? `
+            <button onclick="logHabitProgress('${h.id}', -1)" class="bg-emerald-950 border border-emerald-700 px-2 py-0.5 text-xs text-emerald-300 font-bold hover:bg-emerald-900">-</button>
+            <button onclick="logHabitProgress('${h.id}', 1)" class="bg-emerald-950 border border-emerald-500 px-2 py-0.5 text-xs text-emerald-200 font-bold hover:bg-emerald-800 glow-text">+</button>
+            <button onclick="deleteHabit('${h.id}')" class="text-rose-400 hover:text-rose-200 text-xs font-bold ml-2">[x]</button>
+          ` : ''}
         </div>
       `;
-      return div;
+      return card;
     }
 
     function renderBudget() {
-      const { start, end, daysPassed, totalDays } = getBudgetPeriodRange();
+      const isReadOnly = !!getSharedUserId();
+      const listExpenses = document.getElementById('list-expenses');
+      const breakdownEl = document.getElementById('category-breakdown');
 
+      // Determine period boundaries
+      const now = new Date();
+      let periodStart = new Date(now.getFullYear(), now.getMonth(), monthStartDay);
+      if (now < periodStart) {
+        periodStart = new Date(now.getFullYear(), now.getMonth() - 1, monthStartDay);
+      }
+      let periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, monthStartDay);
+
+      if (budgetHorizon === 'week') {
+        const dayOfWeek = now.getDay();
+        periodStart = new Date(now);
+        periodStart.setDate(now.getDate() - dayOfWeek);
+        periodStart.setHours(0,0,0,0);
+        periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodStart.getDate() + 7);
+      }
+
+      // Filter expenses for active period
       const periodExpenses = expenses.filter(e => {
         const d = new Date(e.createdAt);
-        return d >= start && d <= end;
+        return d >= periodStart && d < periodEnd;
       });
 
-      const periodTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
-      const dailyAvg = periodTotal / daysPassed;
-      const projection = dailyAvg * totalDays;
+      const totalSpent = periodExpenses.reduce((acc, e) => acc + e.amount, 0);
 
-      document.getElementById('label-todate').innerText = budgetHorizon === 'week' ? '// week-to-date total' : '// month-to-date total';
-      document.getElementById('label-projection').innerText = budgetHorizon === 'week' ? '// estimated weekly spend' : '// estimated monthly spend';
+      // Calculations
+      const diffTime = Math.max(1, Math.abs(now - periodStart));
+      const daysElapsed = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      const totalPeriodDays = Math.max(1, Math.ceil(Math.abs(periodEnd - periodStart) / (1000 * 60 * 60 * 24)));
 
-      document.getElementById('stat-mtd').innerText = `$${periodTotal.toFixed(2)}`;
+      const dailyAvg = totalSpent / daysElapsed;
+      const projectedTotal = dailyAvg * totalPeriodDays;
+
+      document.getElementById('label-todate').innerText = budgetHorizon === 'month' ? '// month-to-date total' : '// week-to-date total';
+      document.getElementById('label-projection').innerText = budgetHorizon === 'month' ? '// estimated month spend' : '// estimated week spend';
+
+      document.getElementById('stat-mtd').innerText = `$${totalSpent.toFixed(2)}`;
       document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
-      document.getElementById('stat-projection').innerText = `$${projection.toFixed(2)}`;
+      document.getElementById('stat-projection').innerText = `$${projectedTotal.toFixed(2)}`;
 
+      // Category breakdown
       const catTotals = {};
+      categories.forEach(c => catTotals[c] = 0);
       periodExpenses.forEach(e => {
         catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
       });
 
-      const breakdownContainer = document.getElementById('category-breakdown');
-      breakdownContainer.innerHTML = '';
-
-      categories.forEach(cat => {
-        const total = catTotals[cat] || 0;
-        const pct = periodTotal > 0 ? (total / periodTotal) * 100 : 0;
-        const row = document.createElement('div');
-        row.className = 'space-y-1';
-        row.innerHTML = `
-          <div class="flex justify-between text-xs sm:text-sm font-medium">
-            <span class="text-emerald-300">// ${cat}</span>
-            <span class="text-emerald-100 glow-text">$${total.toFixed(2)} (${pct.toFixed(0)}%)</span>
-          </div>
-          <div class="w-full bg-emerald-950/60 border border-emerald-800 rounded-full h-2 overflow-hidden">
-            <div class="bg-emerald-400 h-full transition-all duration-300" style="width: ${pct}%"></div>
+      breakdownEl.innerHTML = categories.map(c => {
+        const amt = catTotals[c] || 0;
+        const pct = totalSpent > 0 ? ((amt / totalSpent) * 100).toFixed(1) : 0;
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-emerald-300 font-bold">${c}</span>
+              <span class="text-emerald-100">$${amt.toFixed(2)} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-emerald-950/60 rounded-full h-1.5 overflow-hidden border border-emerald-800">
+              <div class="bg-emerald-400 h-1.5 rounded-full" style="width: ${pct}%"></div>
+            </div>
           </div>
         `;
-        breakdownContainer.appendChild(row);
-      });
+      }).join('');
 
-      const listExpenses = document.getElementById('list-expenses');
-      listExpenses.innerHTML = '';
-      if (expenses.length === 0) {
-        listExpenses.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no expenses logged</p>';
-      } else {
-        expenses.forEach(e => {
-          const item = document.createElement('div');
-          item.className = 'flex items-center justify-between p-3 rounded-md border border-emerald-800/80 bg-emerald-950/20 text-sm';
-          item.innerHTML = `
-            <div class="flex items-center gap-3">
-              <span class="text-emerald-400 font-bold">$${e.amount.toFixed(2)}</span>
-              <span class="text-emerald-200">[${e.category}] ${e.note}</span>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="text-xs text-emerald-400/70">${formatDate(e.createdAt)}</span>
-              ${!getBooleanReadOnly() ? `<button onclick="deleteExpense('${e.id}')" class="text-emerald-400 hover:text-rose-400 text-xs">[del]</button>` : ''}
-            </div>
-          `;
-          listExpenses.appendChild(item);
-        });
-      }
+      // Recent Transactions list
+      listExpenses.innerHTML = expenses.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no transactions logged]</p>' : '';
+      expenses.forEach(e => {
+        const row = document.createElement('div');
+        row.className = 'bg-black border border-emerald-800 rounded p-2.5 flex items-center justify-between text-xs';
+        row.innerHTML = `
+          <div>
+            <span class="text-emerald-200 font-bold">$${e.amount.toFixed(2)}</span>
+            <span class="text-emerald-400/90 ml-2">[${e.category}]</span>
+            <span class="text-emerald-600 block text-[10px]">${e.note ? e.note + ' • ' : ''}${formatDate(e.createdAt)}</span>
+          </div>
+          ${!isReadOnly ? `<button onclick="deleteExpense('${e.id}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>` : ''}
+        `;
+        listExpenses.appendChild(row);
+      });
     }
 
     function renderJournal() {
-      const container = document.getElementById('list-journal');
+      const isReadOnly = !!getSharedUserId();
+      const listJournal = document.getElementById('list-journal');
       const selectedMonth = document.getElementById('export-month').value;
-      container.innerHTML = '';
 
-      let filtered = journalEntries;
-      if (selectedMonth) {
-        filtered = journalEntries.filter(e => e.entryDate.startsWith(selectedMonth));
-      }
+      const filtered = selectedMonth 
+        ? journalEntries.filter(e => e.entryDate && e.entryDate.startsWith(selectedMonth))
+        : journalEntries;
 
-      if (filtered.length === 0) {
-        container.innerHTML = '<p class="text-sm text-emerald-500/80 italic">> no journal entries found for this period</p>';
-        return;
-      }
-
+      listJournal.innerHTML = filtered.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no journal logs found for selected month]</p>' : '';
+      
       filtered.forEach(e => {
-        const item = document.createElement('div');
-        item.className = 'group p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box space-y-2';
-        item.innerHTML = `
-          <div class="flex justify-between items-center border-b border-emerald-900/60 pb-2">
-            <span class="text-xs font-bold text-emerald-300 glow-text">// date: ${e.entryDate}</span>
-            <div class="flex items-center gap-3">
-              <span class="text-xs text-emerald-400/70">${formatDate(e.createdAt)}</span>
-              ${!getBooleanReadOnly() ? `<button onclick="deleteJournalEntry('${e.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">[del]</button>` : ''}
-            </div>
+        const card = document.createElement('div');
+        card.className = 'bg-black border border-emerald-700/80 rounded p-3.5 space-y-2 glow-box';
+        card.innerHTML = `
+          <div class="flex justify-between items-center border-b border-emerald-900/60 pb-1.5">
+            <span class="text-xs text-emerald-300 font-bold glow-text">// log: ${e.entryDate}</span>
+            ${!isReadOnly ? `<button onclick="deleteJournalEntry('${e.id}')" class="text-rose-400 hover:text-rose-200 text-xs font-bold">[x]</button>` : ''}
           </div>
-          <p class="text-sm text-emerald-100 whitespace-pre-wrap leading-relaxed">${e.content}</p>
+          <p class="text-xs sm:text-sm text-emerald-100 whitespace-pre-wrap leading-relaxed">${e.content}</p>
         `;
-        container.appendChild(item);
+        listJournal.appendChild(card);
       });
-    }
-
-    function getBooleanReadOnly() {
-      return Boolean(getSharedUserId());
     }
   </script>
 </body>

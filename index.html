@@ -266,7 +266,7 @@
           <div class="flex justify-between items-center text-xs">
             <span class="text-emerald-400 font-bold">// forecast horizon:</span>
             <div class="flex gap-2 bg-black border border-emerald-700 p-1 rounded">
-              <button id="btn-mode-month" onclick="setBudgetHorizon('month')" class="px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900">month</button>
+              <button id="btn-mode-month" onclick="setBudgetHorizon('month')" class="px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-950">month</button>
               <button id="btn-mode-week" onclick="setBudgetHorizon('week')" class="px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200">week</button>
             </div>
           </div>
@@ -756,6 +756,53 @@
       await batch.commit();
     }
 
+    // ================= HEALTH & ROUTINES FUNCTIONS =================
+    async function addHabit() {
+      if (getSharedUserId() || !currentUser) return;
+      const input = document.getElementById('habit-input');
+      const countInput = document.getElementById('habit-count');
+      const catSelect = document.getElementById('habit-category');
+      const name = input.value.trim().toLowerCase();
+      const target = parseInt(countInput.value) || 1;
+      if (!name) return;
+
+      const habit = {
+        name,
+        target,
+        category: catSelect.value,
+        completedCount: 0,
+        lastCompletedDate: null,
+        createdAt: new Date().toISOString()
+      };
+
+      input.value = '';
+      updateSyncStatus('saving routine...');
+      await db.collection('users').doc(currentUser.uid).collection('habits').add(habit);
+    }
+
+    async function incrementHabit(id) {
+      if (getSharedUserId() || !currentUser) return;
+      const habit = habits.find(h => h.id === id);
+      if (!habit) return;
+
+      const today = todayStr;
+      let completedCount = habit.lastCompletedDate === today ? (habit.completedCount || 0) : 0;
+      if (completedCount >= habit.target) return;
+
+      completedCount += 1;
+      updateSyncStatus('updating routine...');
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(id).update({
+        completedCount,
+        lastCompletedDate: today
+      });
+    }
+
+    async function deleteHabit(id) {
+      if (getSharedUserId() || !currentUser) return;
+      updateSyncStatus('deleting routine...');
+      await db.collection('users').doc(currentUser.uid).collection('habits').doc(id).delete();
+    }
+
     // ================= BUDGET & RESET FUNCTIONS =================
     function toggleBudgetSettings() {
       const drawer = document.getElementById('budget-settings-drawer');
@@ -844,7 +891,6 @@
       await db.collection('users').doc(currentUser.uid).collection('expenses').doc(id).delete();
     }
 
-    // Safety-Gated Reset Modal Handlers
     function openResetModal(type) {
       if (getSharedUserId() || !currentUser) return;
       pendingResetType = type;
@@ -1081,7 +1127,51 @@
     }
 
     function renderHealth() {
-      // Stub for health routines tab sync/render
+      const physContainer = document.getElementById('list-habits-physical');
+      const mentContainer = document.getElementById('list-habits-mental');
+      if (!physContainer || !mentContainer) return;
+
+      physContainer.innerHTML = '';
+      mentContainer.innerHTML = '';
+
+      const physicalHabits = habits.filter(h => h.category === 'physical');
+      const mentalHabits = habits.filter(h => h.category === 'mental');
+
+      const renderHabitList = (items, targetEl) => {
+        if (items.length === 0) {
+          targetEl.innerHTML = '<p class="text-xs text-emerald-500/80 italic py-1">> no routines configured</p>';
+          return;
+        }
+        items.forEach(h => {
+          const today = todayStr;
+          const count = h.lastCompletedDate === today ? (h.completedCount || 0) : 0;
+          const isDone = count >= h.target;
+
+          const div = document.createElement('div');
+          div.className = `flex items-center justify-between p-3 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 ${isDone ? 'opacity-70 border-emerald-900/60' : 'glow-box'}`;
+          div.innerHTML = `
+            <div class="flex items-center gap-3">
+              <span class="text-sm font-bold text-emerald-200">${h.name}</span>
+              <span class="text-xs text-emerald-400">(${count}/${h.target})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              ${!getSharedUserId() ? `
+                <button onclick="incrementHabit('${h.id}')" class="text-xs bg-emerald-900 border border-emerald-500 text-emerald-200 px-2 py-1 rounded font-bold hover:bg-emerald-800">[+1 log]</button>
+                <button onclick="deleteHabit('${h.id}')" class="text-xs text-rose-400 hover:text-rose-200 font-bold px-1">[del]</button>
+              ` : ''}
+            </div>
+          `;
+          targetEl.appendChild(div);
+        });
+      };
+
+      renderHabitList(physicalHabits, physContainer);
+      renderHabitList(mentalHabits, mentContainer);
+
+      // Streak calculation
+      const allDone = habits.length > 0 && habits.every(h => (h.lastCompletedDate === todayStr ? (h.completedCount || 0) : 0) >= h.target);
+      const streakEl = document.getElementById('perfect-spree-counter');
+      if (streakEl) streakEl.innerText = allDone ? '1 DAY 🔥' : '0 DAYS 🔥';
     }
 
     function renderBudget() {
@@ -1110,6 +1200,66 @@
           listContainer.appendChild(div);
         });
       }
+
+      // Financial statistics calculations
+      const now = new Date();
+      let startDate;
+      let totalDaysInPeriod = 30;
+
+      if (budgetHorizon === 'month') {
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth();
+        if (now.getDate() >= monthStartDay) {
+          startDate = new Date(curYear, curMonth, monthStartDay);
+        } else {
+          startDate = new Date(curYear, curMonth - 1, monthStartDay);
+        }
+        totalDaysInPeriod = new Date(curYear, curMonth + 1, 0).getDate();
+      } else {
+        const dayOfWeek = now.getDay();
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - dayOfWeek);
+        startDate.setHours(0, 0, 0, 0);
+        totalDaysInPeriod = 7;
+      }
+
+      const periodExpenses = expenses.filter(e => new Date(e.createdAt) >= startDate);
+      const totalSpend = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+      const msElapsed = Math.max(now - startDate, 1000 * 60 * 60 * 24);
+      const daysElapsed = Math.max(1, Math.ceil(msElapsed / (1000 * 60 * 60 * 24)));
+      const dailyAvg = totalSpend / daysElapsed;
+      const projection = dailyAvg * totalDaysInPeriod;
+
+      document.getElementById('stat-mtd').innerText = `$${totalSpend.toFixed(2)}`;
+      document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
+      document.getElementById('stat-projection').innerText = `$${projection.toFixed(2)}`;
+
+      // Category breakdown rendering
+      const catTotals = {};
+      categories.forEach(c => catTotals[c] = 0);
+      periodExpenses.forEach(e => {
+        if (catTotals[e.category] !== undefined) catTotals[e.category] += e.amount;
+        else catTotals[e.category] = e.amount;
+      });
+
+      breakdownContainer.innerHTML = '';
+      Object.keys(catTotals).forEach(cat => {
+        const amt = catTotals[cat];
+        const pct = totalSpend > 0 ? ((amt / totalSpend) * 100).toFixed(1) : 0;
+        const div = document.createElement('div');
+        div.className = 'space-y-1 text-xs';
+        div.innerHTML = `
+          <div class="flex justify-between text-emerald-300 font-bold">
+            <span>${cat}</span>
+            <span>$${amt.toFixed(2)} (${pct}%)</span>
+          </div>
+          <div class="w-full bg-emerald-950/80 rounded-full h-2 border border-emerald-800">
+            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: ${pct}%"></div>
+          </div>
+        `;
+        breakdownContainer.appendChild(div);
+      });
     }
 
     function renderJournal() {

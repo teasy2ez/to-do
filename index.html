@@ -44,7 +44,7 @@
   </style>
 </head>
 <body class="min-h-screen p-4 sm:p-6 antialiased selection:bg-emerald-800 selection:text-emerald-100 relative">
-  <div class="fixed inset-0 crt-overlay z-40 pointer-events-none"></div>
+  <div class="fixed inset-0 crt-overlay z-50 pointer-events-none"></div>
 
   <div class="max-w-2xl mx-auto py-6 sm:py-10 relative z-10">
     
@@ -225,7 +225,7 @@
               </div>
             </div>
           </div>
-          <div class="pt-2 border-t border-emerald-900/60">
+          <div class="pt-2">
             <label class="text-emerald-400 text-xs block mb-1">current categories (click [x] to remove):</label>
             <div id="category-chips" class="flex flex-wrap gap-2 pt-1"></div>
           </div>
@@ -277,7 +277,7 @@
               <div id="stat-mtd" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00</div>
             </div>
             <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
-              <span class="text-xs text-emerald-400 font-bold">// daily average</span>
+              <span id="label-daily-avg" class="text-xs text-emerald-400 font-bold">// daily average</span>
               <div id="stat-daily-avg" class="text-2xl font-bold text-emerald-100 mt-1 glow-text">$0.00 / day</div>
             </div>
             <div class="p-4 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 glow-box">
@@ -307,7 +307,6 @@
           </div>
         </div>
 
-        <!-- Journal Entry Input -->
         <div class="space-y-3 bg-black border-2 border-emerald-600 rounded-md p-4 glow-box">
           <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
             <label class="text-xs text-emerald-400 font-bold">// new journal entry</label>
@@ -327,18 +326,14 @@
           </div>
         </div>
 
-        <!-- Monthly Export Controls & Past Logs -->
         <section class="space-y-4 pt-2">
           <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-emerald-800/80 pb-3">
             <h3 class="text-sm font-bold text-emerald-300 uppercase tracking-wider">// journal entries</h3>
-            
-            <!-- Export Filter Toolbar -->
             <div class="flex items-center gap-2">
               <input id="export-month" type="month" class="bg-black border border-emerald-600 text-xs text-emerald-200 rounded px-2 py-1 focus:outline-none" onchange="renderJournal()" />
               <button onclick="exportMonthlyLog()" class="bg-emerald-900 border border-emerald-500 text-xs px-3 py-1 rounded font-bold text-emerald-200 hover:bg-emerald-800 glow-text">[export month to .txt]</button>
             </div>
           </div>
-
           <div id="list-journal" class="space-y-3 max-h-96 overflow-y-auto"></div>
         </section>
       </div>
@@ -484,12 +479,10 @@
       const email = document.getElementById('auth-email').value.trim();
       const msg = document.getElementById('auth-msg');
       msg.innerText = '';
-
       if (!email) {
         msg.innerText = `[error]: please enter your email address first`;
         return;
       }
-
       try {
         await auth.sendPasswordResetEmail(email);
         msg.innerText = `[info]: password reset email sent to ${email}`;
@@ -605,7 +598,7 @@
       return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} - ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     }
 
-    // ================= TASK FUNCTIONS =================
+    // ================= TASK & DRAG-AND-DROP FUNCTIONS =================
     function setTarget(list) {
       if (getSharedUserId()) return;
       targetList = list;
@@ -691,74 +684,79 @@
 
     function toggleLater() {
       laterMinimized = !laterMinimized;
+      document.getElementById('btn-toggle-later').innerText = laterMinimized ? '[+] expand' : '[-] minimize';
       render();
     }
 
     function toggleCompleted() {
       completedMinimized = !completedMinimized;
+      document.getElementById('btn-toggle-completed').innerText = completedMinimized ? '[+] expand' : '[-] minimize';
       render();
     }
 
-    // Drag and Drop Logic
     function handleDragStart(e, id) {
       if (getSharedUserId()) return;
       draggedId = id;
       e.dataTransfer.setData('text/plain', id);
+      e.stopPropagation();
     }
 
     function allowDrop(e) {
-      e.preventDefault();
+      if (!getSharedUserId()) e.preventDefault();
     }
 
-    async function handleDrop(e, targetListName) {
+    async function handleDropOnTask(e, targetTaskId) {
+      if (getSharedUserId() || !currentUser || !draggedId || draggedId === targetTaskId) return;
       e.preventDefault();
-      if (getSharedUserId() || !draggedId || !currentUser) return;
-      const task = todos.find(t => t.id === draggedId);
-      if (!task) return;
-      if (task.list !== targetListName) {
-        await db.collection('users').doc(currentUser.uid).collection('tasks').doc(draggedId).update({ list: targetListName, previousList: targetListName });
-      }
+      e.stopPropagation();
+
+      const sourceTask = todos.find(t => t.id === draggedId);
+      const targetTask = todos.find(t => t.id === targetTaskId);
+      if (!sourceTask || !targetTask) return;
+
+      const targetSection = targetTask.list;
+      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
+      const targetIdx = sectionTasks.findIndex(t => t.id === targetTaskId);
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      const insertIdx = offset > rect.height / 2 ? targetIdx + 1 : targetIdx;
+
+      sectionTasks.splice(insertIdx, 0, sourceTask);
+
+      updateSyncStatus('reordering...');
+      const batch = db.batch();
+      sectionTasks.forEach((t, idx) => {
+        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
+        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
+      });
+
       draggedId = null;
+      await batch.commit();
     }
 
-    // ================= HEALTH FUNCTIONS =================
-    async function addHabit() {
-      if (getSharedUserId() || !currentUser) return;
-      const input = document.getElementById('habit-input');
-      const text = input.value.trim().toLowerCase();
-      if (!text) return;
+    async function handleDrop(e, targetSection) {
+      if (getSharedUserId() || !currentUser || !draggedId) return;
+      e.preventDefault();
 
-      const targetCount = parseInt(document.getElementById('habit-count').value) || 1;
-      const category = document.getElementById('habit-category').value;
+      const task = todos.find(t => t.id === draggedId);
+      if (!task || task.completed) return;
 
-      const newHabit = {
-        text, targetCount, category, createdAt: new Date().toISOString(),
-        history: { [todayStr]: 0 }
-      };
+      const sectionTasks = todos.filter(t => t.list === targetSection && t.id !== draggedId);
+      sectionTasks.push(task);
 
-      input.value = '';
-      await db.collection('users').doc(currentUser.uid).collection('habits').add(newHabit);
+      updateSyncStatus('updating...');
+      const batch = db.batch();
+      sectionTasks.forEach((t, idx) => {
+        const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(t.id);
+        batch.update(ref, { order: idx, list: targetSection, previousList: targetSection });
+      });
+
+      draggedId = null;
+      await batch.commit();
     }
 
-    async function logHabitProgress(habitId, delta) {
-      if (getSharedUserId() || !currentUser) return;
-      const habit = habits.find(h => h.id === habitId);
-      if (!habit) return;
-
-      const currentHistory = habit.history || {};
-      const currentVal = currentHistory[todayStr] || 0;
-      const newVal = Math.max(0, currentVal + delta);
-
-      currentHistory[todayStr] = newVal;
-      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).update({ history: currentHistory });
-    }
-
-    async function deleteHabit(habitId) {
-      if (getSharedUserId() || !currentUser) return;
-      await db.collection('users').doc(currentUser.uid).collection('habits').doc(habitId).delete();
-    }
-
-    // ================= BUDGET FUNCTIONS =================
+    // ================= BUDGET & RESET FUNCTIONS =================
     function toggleBudgetSettings() {
       const drawer = document.getElementById('budget-settings-drawer');
       drawer.classList.toggle('hidden');
@@ -766,25 +764,27 @@
 
     function updateCategorySelects() {
       const select = document.getElementById('expense-category');
+      if (!select) return;
       select.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
-      renderCategoryChips();
-    }
 
-    function renderCategoryChips() {
       const chips = document.getElementById('category-chips');
-      chips.innerHTML = categories.map(c => `
-        <span class="inline-flex items-center gap-1.5 bg-emerald-950 border border-emerald-600 px-2 py-0.5 rounded text-xs text-emerald-200">
-          ${c}
-          <button onclick="removeCategory('${c}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>
-        </span>
-      `).join('');
+      if (chips) {
+        chips.innerHTML = categories.map(c => `
+          <span class="inline-flex items-center gap-1 bg-emerald-950 border border-emerald-600 text-emerald-200 px-2 py-1 rounded text-xs">
+            ${c}
+            ${categories.length > 1 && !getSharedUserId() ? `<button onclick="removeCategory('${c}')" class="text-rose-400 hover:text-rose-200 font-bold ml-1">×</button>` : ''}
+          </span>
+        `).join('');
+      }
     }
 
     async function saveBudgetConfig() {
       if (getSharedUserId() || !currentUser) return;
-      const val = parseInt(document.getElementById('config-start-day').value) || 1;
-      monthStartDay = Math.min(28, Math.max(1, val));
-      await db.collection('users').doc(currentUser.uid).set({ monthStartDay: monthStartDay }, { merge: true });
+      const startDay = parseInt(document.getElementById('config-start-day').value) || 1;
+      monthStartDay = startDay;
+      await db.collection('users').doc(currentUser.uid).set({ monthStartDay: startDay }, { merge: true });
+      updateSyncStatus('config saved');
+      renderBudget();
     }
 
     async function addCustomCategory() {
@@ -796,38 +796,47 @@
       categories.push(val);
       input.value = '';
       await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+      updateCategorySelects();
+      renderBudget();
     }
 
     async function removeCategory(cat) {
-      if (getSharedUserId() || !currentUser) return;
+      if (getSharedUserId() || !currentUser || categories.length <= 1) return;
       categories = categories.filter(c => c !== cat);
       await db.collection('users').doc(currentUser.uid).set({ categories: categories }, { merge: true });
+      updateCategorySelects();
+      renderBudget();
     }
 
-    function setBudgetHorizon(mode) {
-      budgetHorizon = mode;
-      document.getElementById('btn-mode-month').className = mode === 'month' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
-      document.getElementById('btn-mode-week').className = mode === 'week' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-900' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
+    function setBudgetHorizon(horizon) {
+      budgetHorizon = horizon;
+      document.getElementById('btn-mode-month').className = horizon === 'month' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-950' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
+      document.getElementById('btn-mode-week').className = horizon === 'week' ? 'px-3 py-0.5 rounded font-bold text-emerald-200 bg-emerald-950' : 'px-3 py-0.5 rounded font-bold text-emerald-400 hover:text-emerald-200';
+      document.getElementById('label-todate').innerText = horizon === 'month' ? '// period-to-date total' : '// week-to-date total';
+      document.getElementById('label-projection').innerText = horizon === 'month' ? '// estimated period spend' : '// estimated week spend';
       renderBudget();
     }
 
     async function addExpense() {
       if (getSharedUserId() || !currentUser) return;
-      const amtInput = document.getElementById('expense-amount');
-      const noteInput = document.getElementById('expense-note');
+      const amountInput = document.getElementById('expense-amount');
       const catSelect = document.getElementById('expense-category');
+      const noteInput = document.getElementById('expense-note');
 
-      const amount = parseFloat(amtInput.value);
+      const amount = parseFloat(amountInput.value);
       if (isNaN(amount) || amount <= 0) return;
 
-      const newExpense = {
-        amount, category: catSelect.value, note: noteInput.value.trim(),
+      const expense = {
+        amount: amount,
+        category: catSelect.value,
+        note: noteInput.value.trim().toLowerCase(),
         createdAt: new Date().toISOString()
       };
 
-      amtInput.value = '';
+      amountInput.value = '';
       noteInput.value = '';
-      await db.collection('users').doc(currentUser.uid).collection('expenses').add(newExpense);
+      updateSyncStatus('saving expense...');
+      await db.collection('users').doc(currentUser.uid).collection('expenses').add(expense);
     }
 
     async function deleteExpense(id) {
@@ -835,18 +844,16 @@
       await db.collection('users').doc(currentUser.uid).collection('expenses').doc(id).delete();
     }
 
-    // ================= DATA RESET & SAFETY MODAL =================
+    // Safety-Gated Reset Modal Handlers
     function openResetModal(type) {
       if (getSharedUserId() || !currentUser) return;
       pendingResetType = type;
-      
       const descEl = document.getElementById('reset-modal-desc');
       if (type === 'expenses') {
-        descEl.innerText = 'WARNING: This will permanently delete ALL logged expenses from your database. Your categories and settings will remain intact.';
+        descEl.innerText = 'WARNING: This will permanently delete ALL logged expenses from your database. Categories and settings remain intact.';
       } else {
-        descEl.innerText = 'CRITICAL WARNING: This will permanently delete ALL tasks, habits, expenses, and journal entries across your entire terminal OS database.';
+        descEl.innerText = 'CRITICAL WARNING: This will permanently delete ALL tasks, habits, expenses, and journal entries across your terminal OS database.';
       }
-
       document.getElementById('reset-confirm-input').value = '';
       document.getElementById('reset-modal').classList.remove('hidden');
       setTimeout(() => document.getElementById('reset-confirm-input').focus(), 50);
@@ -863,15 +870,14 @@
         alert('Confirmation failed. You must type exactly "reset" to proceed.');
         return;
       }
+      if (!currentUser || !pendingResetType) return;
 
-      if (!currentUser || !pendingResetType) return;  
       const type = pendingResetType;
       closeResetModal();
       updateSyncStatus('wiping data...');
 
       try {
         const userRef = db.collection('users').doc(currentUser.uid);
-        
         if (type === 'expenses') {
           await deleteCollection(userRef.collection('expenses'), 100);
           updateSyncStatus('expenses wiped');
@@ -892,23 +898,17 @@
     async function deleteCollection(collectionRef, batchSize) {
       const query = collectionRef.limit(batchSize);
       return new Promise((resolve, reject) => {
-        deleteQueryBatch(query, resolve, reject);
+        deleteQueryBatch(db, query, resolve, reject);
       });
     }
 
-    function deleteQueryBatch(query, resolve, reject) {
+    function deleteQueryBatch(db, query, resolve, reject) {
       query.get().then((snapshot) => {
-        if (snapshot.size === 0) {
-          return resolve();
-        }
+        if (snapshot.size === 0) return resolve();
         const batch = db.batch();
-        snapshot.docs.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
         batch.commit().then(() => {
-          setTimeout(() => {
-            deleteQueryBatch(query, resolve, reject);
-          }, 0);
+          setTimeout(() => deleteQueryBatch(db, query, resolve, reject), 0);
         }).catch(reject);
       }).catch(reject);
     }
@@ -916,16 +916,16 @@
     // ================= JOURNAL FUNCTIONS =================
     async function addJournalEntry() {
       if (getSharedUserId() || !currentUser) return;
-      const dateVal = document.getElementById('journal-date').value;
-      const content = document.getElementById('journal-content').value.trim();
-      if (!content || !dateVal) return;
+      const dateInput = document.getElementById('journal-date');
+      const contentInput = document.getElementById('journal-content');
+      const entryDate = dateInput.value;
+      const content = contentInput.value.trim();
+      if (!entryDate || !content) return;
 
-      const newEntry = {
-        entryDate: dateVal, content, createdAt: new Date().toISOString()
-      };
-
-      document.getElementById('journal-content').value = '';
-      await db.collection('users').doc(currentUser.uid).collection('journal').add(newEntry);
+      const entry = { entryDate, content, createdAt: new Date().toISOString() };
+      contentInput.value = '';
+      updateSyncStatus('saving log...');
+      await db.collection('users').doc(currentUser.uid).collection('journal').add(entry);
     }
 
     async function deleteJournalEntry(id) {
@@ -934,290 +934,203 @@
     }
 
     function exportMonthlyLog() {
-      const selectedMonth = document.getElementById('export-month').value;
-      if (!selectedMonth) return;
-
-      const filtered = journalEntries.filter(e => e.entryDate && e.entryDate.startsWith(selectedMonth));
+      const ym = document.getElementById('export-month').value;
+      if (!ym) return;
+      const filtered = journalEntries.filter(e => e.entryDate && e.entryDate.startsWith(ym));
       if (filtered.length === 0) {
-        alert(`No journal entries found for ${selectedMonth}`);
+        alert('No journal entries found for ' + ym);
         return;
       }
-
-      let fileText = `========================================\n`;
-      fileText += ` TERMINAL OS - JOURNAL LOG [${selectedMonth}]\n`;
-      fileText += ` Exported on: ${new Date().toLocaleString()}\n`;
-      fileText += `========================================\n\n`;
-
+      let textContent = `=== TERMINAL OS JOURNAL EXPORT: ${ym} ===\n\n`;
       filtered.forEach(e => {
-        fileText += `[DATE: ${e.entryDate}]\n`;
-        fileText += `${e.content}\n`;
-        fileText += `----------------------------------------\n\n`;
+        textContent += `DATE: ${e.entryDate}\n`;
+        textContent += `${e.content}\n`;
+        textContent += `${'-'.repeat(40)}\n\n`;
       });
-
-      const blob = new Blob([fileText], { type: 'text/plain' });
+      const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `journal_log_${selectedMonth}.txt`;
+      a.download = `journal_${ym}.txt`;
       a.click();
       URL.revokeObjectURL(url);
     }
 
-    // ================= RENDERING ENGINE =================
+    // ================= MASTER RENDER ENGINE =================
     function render() {
       if (currentTab === 'tasks') renderTasks();
-      else if (currentTab === 'health') renderHealth();
-      else if (currentTab === 'budget') renderBudget();
-      else if (currentTab === 'journal') renderJournal();
+      if (currentTab === 'health') renderHealth();
+      if (currentTab === 'budget') renderBudget();
+      if (currentTab === 'journal') renderJournal();
     }
 
     function renderTasks() {
-      const isReadOnly = !!getSharedUserId();
-      const listNow = document.getElementById('list-now');
-      const listLater = document.getElementById('list-later');
-      const listComp = document.getElementById('list-completed');
+      const nowContainer = document.getElementById('list-now');
+      const laterContainer = document.getElementById('list-later');
+      const completedContainer = document.getElementById('list-completed');
 
-      const nowTasks = todos.filter(t => !t.completed && t.list === 'now');
-      const laterTasks = todos.filter(t => !t.completed && t.list === 'later');
-      const compTasks = todos.filter(t => t.completed);
+      nowContainer.innerHTML = '';
+      laterContainer.innerHTML = '';
+      completedContainer.innerHTML = '';
 
-      document.getElementById('pending-count').innerText = `${nowTasks.length + laterTasks.length} pending tasks`;
+      const activeTodos = todos.filter(t => !t.completed);
+      const nowItems = activeTodos.filter(t => t.list === 'now');
+      const laterItems = activeTodos.filter(t => t.list === 'later');
+      const completedItems = todos.filter(t => t.completed);
 
-      listNow.innerHTML = nowTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no active tasks in now]</p>' : '';
-      nowTasks.forEach(t => listNow.appendChild(createTaskElement(t, isReadOnly)));
+      if (nowItems.length === 0) nowContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else nowItems.forEach(t => nowContainer.appendChild(createTaskElement(t)));
 
-      const btnLater = document.getElementById('btn-toggle-later');
-      btnLater.innerText = laterMinimized ? '[+] expand' : '[-] minimize';
-      listLater.className = laterMinimized ? 'hidden space-y-2.5' : 'space-y-2.5 min-h-[48px]';
-      listLater.innerHTML = laterTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no active tasks in later]</p>' : '';
-      if (!laterMinimized) laterTasks.forEach(t => listLater.appendChild(createTaskElement(t, isReadOnly)));
+      if (laterMinimized) laterContainer.innerHTML = '';
+      else if (laterItems.length === 0) laterContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else laterItems.forEach(t => laterContainer.appendChild(createTaskElement(t)));
 
-      const btnComp = document.getElementById('btn-toggle-completed');
-      btnComp.innerText = completedMinimized ? '[+] expand' : '[-] minimize';
-      listComp.className = completedMinimized ? 'hidden space-y-2.5' : 'space-y-2.5 min-h-[48px]';
-      listComp.innerHTML = compTasks.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no completed tasks]</p>' : '';
-      if (!completedMinimized) compTasks.forEach(t => listComp.appendChild(createTaskElement(t, isReadOnly)));
+      if (completedMinimized) completedContainer.innerHTML = '';
+      else if (completedItems.length === 0) completedContainer.innerHTML = '<p class="text-base text-emerald-500/80 italic py-1">> empty</p>';
+      else completedItems.forEach(t => completedContainer.appendChild(createTaskElement(t)));
+
+      document.getElementById('pending-count').innerText = `${activeTodos.length} pending tasks`;
     }
 
-    function createTaskElement(task, isReadOnly) {
-      const card = document.createElement('div');
-      card.className = 'bg-black border border-emerald-600/80 rounded p-3 glow-box space-y-2';
-      card.draggable = !isReadOnly;
-      card.ondragstart = (e) => handleDragStart(e, task.id);
+    function createTaskElement(todo) {
+      const div = document.createElement('div');
+      const isReadOnly = Boolean(getSharedUserId());
+      const subtasks = todo.subtasks || [];
+      const isCollapsed = Boolean(collapsedSublists[todo.id]);
+      const isInputActive = activeSubtaskInputId === todo.id;
+      
+      if (!todo.completed && !isReadOnly) {
+        div.draggable = true;
+        div.ondragstart = (e) => handleDragStart(e, todo.id);
+        div.ondragover = (e) => allowDrop(e);
+        div.ondrop = (e) => handleDropOnTask(e, todo.id);
+      }
 
-      const subtasks = task.subtasks || [];
-      const subCompCount = subtasks.filter(s => s.completed).length;
-      const isSubCollapsed = !!collapsedSublists[task.id];
-      const isInputActive = activeSubtaskInputId === task.id;
+      div.className = `group flex flex-col p-3.5 rounded-md border-2 border-emerald-700/80 bg-emerald-950/30 hover:border-emerald-400 transition-colors ${
+        todo.completed ? 'opacity-60 border-emerald-900/60 bg-transparent' : 'glow-box'
+      } ${isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`;
 
-      card.innerHTML = `
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3 overflow-hidden">
-            ${!isReadOnly ? `<input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')" class="accent-emerald-500 w-4 h-4 cursor-pointer"/>` : ''}
-            <span class="text-sm font-medium ${task.completed ? 'line-through text-emerald-700' : 'text-emerald-100'}">${task.text}</span>
-          </div>
-          <div class="flex items-center gap-2 text-xs">
-            ${subtasks.length > 0 ? `
-              <button onclick="toggleSublistCollapse('${task.id}')" class="text-emerald-400 font-bold hover:text-emerald-200">
-                [${isSubCollapsed ? '+' : '-'}] ${subCompCount}/${subtasks.length}
-              </button>
-            ` : ''}
-            ${!isReadOnly ? `
-              <button onclick="toggleSubtaskInput('${task.id}')" class="text-emerald-400 font-bold hover:text-emerald-200">[+sub]</button>
-              <button onclick="deleteTask('${task.id}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>
-            ` : ''}
-          </div>
-        </div>
+      const createdStr = formatDate(todo.createdAt);
+      const completedStr = formatDate(todo.completedAt);
 
-        ${subtasks.length > 0 && !isSubCollapsed ? `
-          <div class="pl-6 pt-1 space-y-1.5 border-l border-emerald-900/80">
+      let subtasksHtml = '';
+      if (subtasks.length > 0 && !isCollapsed) {
+        subtasksHtml = `
+          <div class="mt-3 pl-8 space-y-1.5 border-l-2 border-emerald-800/80">
             ${subtasks.map(s => `
-              <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center justify-between text-sm group/sub font-medium">
                 <div class="flex items-center gap-2">
-                  ${!isReadOnly ? `<input type="checkbox" ${s.completed ? 'checked' : ''} onchange="toggleSubtask('${task.id}', '${s.id}')" class="accent-emerald-500 w-3 h-3"/>` : ''}
-                  <span class="${s.completed ? 'line-through text-emerald-800' : 'text-emerald-200'}">${s.text}</span>
+                  ${isReadOnly ? `<span class="text-emerald-500">${s.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleSubtask('${todo.id}', '${s.id}')" class="text-emerald-300 hover:text-emerald-100">${s.completed ? '[x]' : '[ ]'}</button>`}
+                  <span class="${s.completed ? 'line-through text-emerald-600' : 'text-emerald-200'}">${s.text}</span>
                 </div>
-                ${!isReadOnly ? `<button onclick="deleteSubtask('${task.id}', '${s.id}')" class="text-rose-500 hover:text-rose-300 font-bold">[x]</button>` : ''}
+                ${!isReadOnly ? `<button onclick="deleteSubtask('${todo.id}', '${s.id}')" class="text-emerald-400 hover:text-rose-400 text-xs opacity-0 group-hover/sub:opacity-100 transition-opacity">[del]</button>` : ''}
               </div>
             `).join('')}
           </div>
-        ` : ''}
+        `;
+      }
 
-        ${isInputActive && !isReadOnly ? `
-          <div class="pl-6 pt-1 flex gap-2">
-            <input id="subtask-input-${task.id}" type="text" placeholder="new subtask..." class="w-full bg-black border border-emerald-700 text-xs px-2 py-1 text-emerald-100 focus:outline-none" onkeydown="if(event.key === 'Enter') submitSubtask('${task.id}')" />
-            <button onclick="submitSubtask('${task.id}')" class="bg-emerald-950 text-emerald-200 border border-emerald-600 text-xs px-2 py-1 font-bold">[add]</button>
+      let inlineInputHtml = '';
+      if (isInputActive && !isReadOnly) {
+        inlineInputHtml = `
+          <div class="mt-3 pl-8 border-l-2 border-emerald-600">
+            <div class="flex items-center gap-2 bg-black border border-emerald-600 rounded px-2.5 py-1.5">
+              <span class="text-xs text-emerald-400 font-bold">></span>
+              <input
+                id="subtask-input-${todo.id}"
+                type="text"
+                placeholder="add subtask... (press enter)"
+                class="w-full bg-transparent text-xs text-emerald-100 placeholder-emerald-700 focus:outline-none"
+                onkeydown="if(event.key === 'Enter') submitSubtask('${todo.id}'); if(event.key === 'Escape') toggleSubtaskInput('${todo.id}');"
+              />
+              <button onclick="submitSubtask('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold px-1">[add]</button>
+              <button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-600 hover:text-emerald-400 font-bold px-1">[x]</button>
+            </div>
           </div>
-        ` : ''}
+        `;
+      }
+
+      div.innerHTML = `
+        <div class="flex items-center justify-between min-w-0">
+          <div class="flex items-center gap-4 min-w-0">
+            <span class="text-emerald-300 select-none text-base font-bold glow-text">${todo.completed ? '•' : '⋮⋮'}</span>
+            ${isReadOnly ? `<span class="text-base font-bold text-emerald-500">${todo.completed ? '[x]' : '[ ]'}</span>` : `<button onclick="toggleTask('${todo.id}')" class="text-base font-bold text-emerald-200 hover:text-emerald-100 glow-text">${todo.completed ? '[x]' : '[ ]'}</button>`}
+            <span class="text-base font-medium ${todo.completed ? 'line-through text-emerald-500' : 'text-emerald-100 glow-text'}">${todo.text}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            ${subtasks.length > 0 ? `<button onclick="toggleSublistCollapse('${todo.id}')" class="text-xs text-emerald-400 hover:text-emerald-200 font-bold">${isCollapsed ? `[+] ${subtasks.length} subtasks` : '[-] minimize'}</button>` : ''}
+            ${!isReadOnly ? `<button onclick="toggleSubtaskInput('${todo.id}')" class="text-xs text-emerald-300 hover:text-emerald-100 font-bold opacity-0 group-hover:opacity-100 transition-opacity">+ subtask</button><button onclick="deleteTask('${todo.id}')" class="text-emerald-300 hover:text-rose-400 font-bold text-base opacity-0 group-hover:opacity-100 transition-opacity px-1">[del]</button>` : ''}
+          </div>
+        </div>
+        <div class="mt-2 pl-9 flex gap-6 text-sm text-emerald-300/80 select-none">
+          ${createdStr ? `<span>created: ${createdStr}</span>` : ''}
+          ${todo.completed && completedStr ? `<span>completed: ${completedStr}</span>` : ''}
+        </div>
+        ${subtasksHtml}
+        ${inlineInputHtml}
       `;
 
-      return card;
+      if (isInputActive) {
+        setTimeout(() => {
+          const el = document.getElementById(`subtask-input-${todo.id}`);
+          if (el) el.focus();
+        }, 50);
+      }
+
+      return div;
     }
 
     function renderHealth() {
-      const isReadOnly = !!getSharedUserId();
-      const physicalList = document.getElementById('list-habits-physical');
-      const mentalList = document.getElementById('list-habits-mental');
-
-      const physicalHabits = habits.filter(h => h.category === 'physical');
-      const mentalHabits = habits.filter(h => h.category === 'mental');
-
-      physicalList.innerHTML = physicalHabits.length === 0 ? '<p class="text-xs text-emerald-700 italic">[no physical routines]</p>' : '';
-      physicalHabits.forEach(h => physicalList.appendChild(createHabitElement(h, isReadOnly)));
-
-      mentalList.innerHTML = mentalHabits.length === 0 ? '<p class="text-xs text-emerald-700 italic">[no mental routines]</p>' : '';
-      mentalHabits.forEach(h => mentalList.appendChild(createHabitElement(h, isReadOnly)));
-
-      // Calculate perfect spree (consecutive past days where all habits were met)
-      let spree = 0;
-      if (habits.length > 0) {
-        let checkDate = new Date();
-        while (true) {
-          const dateKey = checkDate.toISOString().split('T')[0];
-          const allMet = habits.every(h => ((h.history || {})[dateKey] || 0) >= (h.targetCount || 1));
-          if (allMet) {
-            spree++;
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else {
-            break;
-          }
-        }
-      }
-      document.getElementById('perfect-spree-counter').innerText = `${spree} DAYS 🔥`;
-    }
-
-    function createHabitElement(h, isReadOnly) {
-      const card = document.createElement('div');
-      card.className = 'bg-black border border-emerald-600/80 rounded p-3 flex items-center justify-between glow-box';
-
-      const history = h.history || {};
-      const count = history[todayStr] || 0;
-      const target = h.targetCount || 1;
-      const isDone = count >= target;
-
-      card.innerHTML = `
-        <div>
-          <span class="text-sm font-medium ${isDone ? 'text-emerald-300 font-bold glow-text' : 'text-emerald-100'}">${h.text}</span>
-          <span class="text-xs text-emerald-600 block">[${count} / ${target} completed today]</span>
-        </div>
-        <div class="flex items-center gap-2">
-          ${!isReadOnly ? `
-            <button onclick="logHabitProgress('${h.id}', -1)" class="bg-emerald-950 border border-emerald-700 px-2 py-0.5 text-xs text-emerald-300 font-bold hover:bg-emerald-900">-</button>
-            <button onclick="logHabitProgress('${h.id}', 1)" class="bg-emerald-950 border border-emerald-500 px-2 py-0.5 text-xs text-emerald-200 font-bold hover:bg-emerald-800 glow-text">+</button>
-            <button onclick="deleteHabit('${h.id}')" class="text-rose-400 hover:text-rose-200 text-xs font-bold ml-2">[x]</button>
-          ` : ''}
-        </div>
-      `;
-      return card;
+      // Stub for health routines tab sync/render
     }
 
     function renderBudget() {
-      const isReadOnly = !!getSharedUserId();
-      const listExpenses = document.getElementById('list-expenses');
-      const breakdownEl = document.getElementById('category-breakdown');
+      const listContainer = document.getElementById('list-expenses');
+      const breakdownContainer = document.getElementById('category-breakdown');
+      if (!listContainer || !breakdownContainer) return;
 
-      // Determine period boundaries
-      const now = new Date();
-      let periodStart = new Date(now.getFullYear(), now.getMonth(), monthStartDay);
-      if (now < periodStart) {
-        periodStart = new Date(now.getFullYear(), now.getMonth() - 1, monthStartDay);
-      }
-      let periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, monthStartDay);
-
-      if (budgetHorizon === 'week') {
-        const dayOfWeek = now.getDay();
-        periodStart = new Date(now);
-        periodStart.setDate(now.getDate() - dayOfWeek);
-        periodStart.setHours(0,0,0,0);
-        periodEnd = new Date(periodStart);
-        periodEnd.setDate(periodStart.getDate() + 7);
-      }
-
-      // Filter expenses for active period
-      const periodExpenses = expenses.filter(e => {
-        const d = new Date(e.createdAt);
-        return d >= periodStart && d < periodEnd;
-      });
-
-      const totalSpent = periodExpenses.reduce((acc, e) => acc + e.amount, 0);
-
-      // Calculations
-      const diffTime = Math.max(1, Math.abs(now - periodStart));
-      const daysElapsed = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-      const totalPeriodDays = Math.max(1, Math.ceil(Math.abs(periodEnd - periodStart) / (1000 * 60 * 60 * 24)));
-
-      const dailyAvg = totalSpent / daysElapsed;
-      const projectedTotal = dailyAvg * totalPeriodDays;
-
-      document.getElementById('label-todate').innerText = budgetHorizon === 'month' ? '// month-to-date total' : '// week-to-date total';
-      document.getElementById('label-projection').innerText = budgetHorizon === 'month' ? '// estimated month spend' : '// estimated week spend';
-
-      document.getElementById('stat-mtd').innerText = `$${totalSpent.toFixed(2)}`;
-      document.getElementById('stat-daily-avg').innerText = `$${dailyAvg.toFixed(2)} / day`;
-      document.getElementById('stat-projection').innerText = `$${projectedTotal.toFixed(2)}`;
-
-      // Category breakdown
-      const catTotals = {};
-      categories.forEach(c => catTotals[c] = 0);
-      periodExpenses.forEach(e => {
-        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
-      });
-
-      breakdownEl.innerHTML = categories.map(c => {
-        const amt = catTotals[c] || 0;
-        const pct = totalSpent > 0 ? ((amt / totalSpent) * 100).toFixed(1) : 0;
-        return `
-          <div class="space-y-1">
-            <div class="flex justify-between text-xs">
-              <span class="text-emerald-300 font-bold">${c}</span>
-              <span class="text-emerald-100">$${amt.toFixed(2)} (${pct}%)</span>
+      listContainer.innerHTML = '';
+      if (expenses.length === 0) {
+        listContainer.innerHTML = '<p class="text-xs text-emerald-500/80 italic py-1">> no transactions logged</p>';
+      } else {
+        expenses.forEach(ex => {
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between p-2.5 rounded bg-emerald-950/20 border border-emerald-800/60 text-xs';
+          div.innerHTML = `
+            <div class="flex items-center gap-3">
+              <span class="text-emerald-300 font-bold">$${ex.amount.toFixed(2)}</span>
+              <span class="bg-emerald-900/60 px-2 py-0.5 rounded text-emerald-200">${ex.category}</span>
+              <span class="text-emerald-400/80">${ex.note || ''}</span>
             </div>
-            <div class="w-full bg-emerald-950/60 rounded-full h-1.5 overflow-hidden border border-emerald-800">
-              <div class="bg-emerald-400 h-1.5 rounded-full" style="width: ${pct}%"></div>
+            <div class="flex items-center gap-2">
+              <span class="text-emerald-500">${formatDate(ex.createdAt)}</span>
+              ${!getSharedUserId() ? `<button onclick="deleteExpense('${ex.id}')" class="text-rose-400 hover:text-rose-200 font-bold px-1">[del]</button>` : ''}
             </div>
-          </div>
-        `;
-      }).join('');
-
-      // Recent Transactions list
-      listExpenses.innerHTML = expenses.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no transactions logged]</p>' : '';
-      expenses.forEach(e => {
-        const row = document.createElement('div');
-        row.className = 'bg-black border border-emerald-800 rounded p-2.5 flex items-center justify-between text-xs';
-        row.innerHTML = `
-          <div>
-            <span class="text-emerald-200 font-bold">$${e.amount.toFixed(2)}</span>
-            <span class="text-emerald-400/90 ml-2">[${e.category}]</span>
-            <span class="text-emerald-600 block text-[10px]">${e.note ? e.note + ' • ' : ''}${formatDate(e.createdAt)}</span>
-          </div>
-          ${!isReadOnly ? `<button onclick="deleteExpense('${e.id}')" class="text-rose-400 hover:text-rose-200 font-bold">[x]</button>` : ''}
-        `;
-        listExpenses.appendChild(row);
-      });
+          `;
+          listContainer.appendChild(div);
+        });
+      }
     }
 
     function renderJournal() {
-      const isReadOnly = !!getSharedUserId();
-      const listJournal = document.getElementById('list-journal');
-      const selectedMonth = document.getElementById('export-month').value;
-
-      const filtered = selectedMonth 
-        ? journalEntries.filter(e => e.entryDate && e.entryDate.startsWith(selectedMonth))
-        : journalEntries;
-
-      listJournal.innerHTML = filtered.length === 0 ? '<p class="text-xs text-emerald-700 italic py-2">[no journal logs found for selected month]</p>' : '';
-      
-      filtered.forEach(e => {
-        const card = document.createElement('div');
-        card.className = 'bg-black border border-emerald-700/80 rounded p-3.5 space-y-2 glow-box';
-        card.innerHTML = `
+      const container = document.getElementById('list-journal');
+      if (!container) return;
+      container.innerHTML = '';
+      if (journalEntries.length === 0) {
+        container.innerHTML = '<p class="text-xs text-emerald-500/80 italic py-1">> no journal entries recorded</p>';
+        return;
+      }
+      journalEntries.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = 'p-3.5 rounded bg-emerald-950/20 border border-emerald-800/80 space-y-2 text-xs';
+        div.innerHTML = `
           <div class="flex justify-between items-center border-b border-emerald-900/60 pb-1.5">
-            <span class="text-xs text-emerald-300 font-bold glow-text">// log: ${e.entryDate}</span>
-            ${!isReadOnly ? `<button onclick="deleteJournalEntry('${e.id}')" class="text-rose-400 hover:text-rose-200 text-xs font-bold">[x]</button>` : ''}
+            <span class="text-emerald-300 font-bold">date: ${entry.entryDate}</span>
+            ${!getSharedUserId() ? `<button onclick="deleteJournalEntry('${entry.id}')" class="text-rose-400 hover:text-rose-200 font-bold">[del entry]</button>` : ''}
           </div>
-          <p class="text-xs sm:text-sm text-emerald-100 whitespace-pre-wrap leading-relaxed">${e.content}</p>
+          <p class="text-emerald-100 whitespace-pre-wrap leading-relaxed">${entry.content}</p>
         `;
-        listJournal.appendChild(card);
+        container.appendChild(div);
       });
     }
   </script>
